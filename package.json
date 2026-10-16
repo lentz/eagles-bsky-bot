@@ -9,7 +9,7 @@
     "lint": "eslint src/",
     "watch": "tsc --watch",
     "start": "node src/index.ts",
-    "dev": "nodenv ."
+    "dev": "node --watch src/index.ts"
   },
   "keywords": [
     "bsky",
@@ -35,7 +35,6 @@
     "@typescript-eslint/parser": "^5.59.1",
     "eslint": "^8.39.0",
     "eslint-plugin-sonarjs": "^0.19.0",
-    "node-env-run": "^4.0.2",
     "typescript": "^7.0.2"
   }
 }
