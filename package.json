@@ -1,7 +1,7 @@
 {
-  "name": "bsky-bot",
+  "name": "eagles-bsky-bot",
   "version": "1.0.0",
-  "description": "A template repo for building Bluesky bots",
+  "description": "Bluesky bot to mirror Mastodon posts about the Eagles",
   "main": "src/index.ts",
   "type": "module",
   "scripts": {
