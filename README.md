@@ -169,7 +169,6 @@ The following files in this bot **do not** need to be edited to run properly, an
 * / package-lock.json
 * / package.json
 * / tsconfig.json
-* / yarn.lock
 
 
 ## FAQ
