@@ -109,7 +109,7 @@ export default class Bot
     const videoBuffer = await fetchBuffer(url);
 
     // Upload the video
-    const { data } = await this.userAgent.com.atproto.repo.uploadBlob(videoBuffer);
+    const { data } = await this.userAgent.com.atproto.repo.uploadBlob(new Uint8Array(videoBuffer));
 
     if (!data?.blob) {
       throw new Error("Failed to upload video: no blob returned.");
@@ -182,7 +182,7 @@ export default class Bot
             console.log("file too big");
             cardBuffer = await fetchBuffer("https://media.d3.nhle.com/image/private/t_ratio16_9-size50/v1697721957/prd/assets/flyers/assets/phi_2568x1144.png");
           }
-          const cardUpload = await this.userAgent.com.atproto.repo.uploadBlob(cardBuffer, {encoding: "image/png"});
+          const cardUpload = await this.userAgent.com.atproto.repo.uploadBlob(new Uint8Array(cardBuffer), {encoding: "image/png"});
           var cardObj = {"uri": cards[0], "title": cards[1], "description": cards[2], "thumb": cardUpload["data"]["blob"],};
           cardEmbed = {"$type": "app.bsky.embed.external", "external": cardObj};
       }
@@ -194,7 +194,7 @@ export default class Bot
           var buffer = await fetchBuffer(urls[i]);
           if (buffer.length <= 1000000)
           {
-            const upload = await this.userAgent.com.atproto.repo.uploadBlob(buffer, {encoding: "image/png"});
+            const upload = await this.userAgent.com.atproto.repo.uploadBlob(new Uint8Array(buffer), {encoding: "image/png"});
             if (img == undefined)
             {
               if (alts[i] != "None")
