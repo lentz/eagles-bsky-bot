@@ -1,4 +1,4 @@
-import { bskyAccount, bskyService } from "./config.js";
+import { bskyAccount, bskyService } from "./config.ts";
 import type {
   AtpAgentLoginOpts,
   AtpAgentOptions,
