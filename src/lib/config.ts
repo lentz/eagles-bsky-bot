@@ -1,6 +1,11 @@
-import { env } from 'node:process';
+import { existsSync } from 'node:fs';
+import { env, loadEnvFile } from 'node:process';
 import type { AtpAgentLoginOpts } from '@atproto/api';
 import { z } from 'zod';
+
+if (existsSync('.env')) {
+  loadEnvFile('.env');
+}
 
 const envSchema = z.object({
   BSKY_HANDLE: z.string().min(1),

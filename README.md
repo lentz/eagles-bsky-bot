@@ -51,6 +51,8 @@ BSKY_PASSWORD: ${{ secrets.BSKY_PASSWORD }}
 For **Name**, type in `BSKY_HANDLE` or `BSKY_PASSWORD`
 For **Secret**, type in the handle (ex. @notphillies.bsky.social) or the password (can be the password you set up on Bluesky or an app password).
 
+For local development, copy `.env.example` to `.env` and fill in the values. The app loads `.env` automatically when present; values already set in the environment take precedence.
+
 ### [/ src / lib / bot.ts](src/lib/bot.ts)
 
 #### 🔷 Line 29
