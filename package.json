@@ -24,6 +24,12 @@
     "url": "https://philna.sh/"
   },
   "license": "MIT",
+  "dependencies": {
+    "@atproto/api": "^0.13.12",
+    "node-html-parser": "^6.1.10",
+    "tsl-mastodon-api": "^0.4.1",
+    "zod": "^4.6.7"
+  },
   "devDependencies": {
     "@types/node": "^18.16.2",
     "@typescript-eslint/eslint-plugin": "^5.59.1",
@@ -32,11 +38,5 @@
     "eslint-plugin-sonarjs": "^0.19.0",
     "node-env-run": "^4.0.2",
     "typescript": "^7.0.2"
-  },
-  "dependencies": {
-    "@atproto/api": "^0.13.12",
-    "node-html-parser": "^6.1.10",
-    "tsl-mastodon-api": "^0.4.1",
-    "zod": "^3.21.4"
   }
 }
