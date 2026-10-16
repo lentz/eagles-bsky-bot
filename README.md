@@ -31,7 +31,6 @@ If the bot is slow to catch up, you can go to the Actions tab, select the most r
 
 #### 🔷 Lines 14-15
 ```
-- run: npm install axios
 - run: npm install tsl-mastodon-api
 ```
 
@@ -89,7 +88,7 @@ To work around this, I change this setting to a lower number (ex. if the post I 
 **What to change:** When Bluesky updated their limits on video from 1 minute to 3 minutes, I noticed that the bots were still pulling the thumbnail of videos longer than a minute and adding a note in the alt text that the video exceeds Bluesky's limits. After digging around the code for a bit, I noticed that where it currently says `180` in the line above, it had said `60`. So, if Bluesky increases the time limit on videos again, update this line with the new time limit in number of seconds.
 
 #### 🔷 Line 175
-`cardResponse = await axios.get("https://media.d3.nhle.com/image/private/t_ratio16_9-size50/v1697721957/prd/assets/flyers/assets/phi_2568x1144.png", { responseType: 'arraybuffer'});`
+`cardBuffer = Buffer.from(await (await fetch("https://media.d3.nhle.com/image/private/t_ratio16_9-size50/v1697721957/prd/assets/flyers/assets/phi_2568x1144.png")).arrayBuffer());`
 
 **Purpose:** If the bot has trouble pulling a card from the source post and buffers for too long, this is the image it will post in place of the card.
 

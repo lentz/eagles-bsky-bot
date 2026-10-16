@@ -8,13 +8,20 @@ import atproto from "@atproto/api";
 const { BskyAgent, RichText } = atproto;
 import { AppBskyEmbedVideo, AppBskyVideoDefs, AtpAgent } from "@atproto/api";
 import { promises as fs } from "fs";
-import axios from "axios";
 
 type BotOptions = 
 {
   service: string | URL;
   dryRun: boolean;
 };
+
+async function fetchBuffer(url: string): Promise<Buffer> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);
+  }
+  return Buffer.from(await response.arrayBuffer());
+}
 
 export default class Bot 
 {
@@ -99,8 +106,7 @@ export default class Bot
     var metadataArr = alt.split("@#*");
     
     // Fetch the video as a buffer
-    const videoResponse = await axios.get(url, { responseType: 'arraybuffer' });
-    const videoBuffer = Buffer.from(videoResponse.data);
+    const videoBuffer = await fetchBuffer(url);
 
     // Upload the video
     const { data } = await this.userAgent.com.atproto.repo.uploadBlob(videoBuffer);
@@ -143,8 +149,11 @@ export default class Bot
     const { data: serviceAuth } = await this.userAgent.com.atproto.server.getServiceAuth({aud: 'did:web:video.bsky.app', lxm: 'app.bsky.video.getUploadLimits', exp: Date.now() / 1000 + 60 * 30,},);
     const token = serviceAuth.token;
     const limitsUrl = 'https://video.bsky.app/xrpc/app.bsky.video.getUploadLimits'; 
-    const limitsResponse = await axios.get(limitsUrl, {headers: {'Authorization': `Bearer ${token}`}});
-    const limits = limitsResponse.data;
+    const limitsResponse = await fetch(limitsUrl, { headers: { Authorization: `Bearer ${token}` } });
+    if (!limitsResponse.ok) {
+      throw new Error(`Failed to fetch video upload limits: ${limitsResponse.status} ${limitsResponse.statusText}`);
+    }
+    const limits = await limitsResponse.json();
 
     if (urls[0].slice(-3) == "mp4" && parseFloat(alts[0].split("@#*")[2]) < 60 && limits.canUpload == true)
     {
@@ -167,13 +176,11 @@ export default class Bot
       }
       if (card != "None" && urls[0] == "None")
       {
-        var cardResponse = await axios.get(cards[3], { responseType: 'arraybuffer'});
-        var cardBuffer = Buffer.from(cardResponse.data, "utf-8");
+        var cardBuffer = await fetchBuffer(cards[3]);
           if (cardBuffer.length > 1000000)
           {
             console.log("file too big");
-            cardResponse = await axios.get("https://media.d3.nhle.com/image/private/t_ratio16_9-size50/v1697721957/prd/assets/flyers/assets/phi_2568x1144.png", { responseType: 'arraybuffer'}); 
-            cardBuffer = Buffer.from(cardResponse.data, "utf-8");
+            cardBuffer = await fetchBuffer("https://media.d3.nhle.com/image/private/t_ratio16_9-size50/v1697721957/prd/assets/flyers/assets/phi_2568x1144.png");
           }
           const cardUpload = await this.userAgent.com.atproto.repo.uploadBlob(cardBuffer, {encoding: "image/png"});
           var cardObj = {"uri": cards[0], "title": cards[1], "description": cards[2], "thumb": cardUpload["data"]["blob"],};
@@ -184,8 +191,7 @@ export default class Bot
       {
         if (urls[i] != "None")
         {
-          var response = await axios.get(urls[i], { responseType: 'arraybuffer'});
-          var buffer = Buffer.from(response.data, "utf-8");
+          var buffer = await fetchBuffer(urls[i]);
           if (buffer.length <= 1000000)
           {
             const upload = await this.userAgent.com.atproto.repo.uploadBlob(buffer, {encoding: "image/png"});
