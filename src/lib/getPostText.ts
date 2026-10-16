@@ -1,8 +1,8 @@
-import * as Mastodon from "tsl-mastodon-api";
+import * as Mastodon from 'tsl-mastodon-api';
 
 const mastodon = new Mastodon.API({
-  access_token: "paste_access_token_here",
-  api_url: "https://mastodon.social/api/v1/",
+  access_token: 'paste_access_token_here',
+  api_url: 'https://mastodon.social/api/v1/',
 }); // access the Mastodon API using the access token.
 
 /*
@@ -30,7 +30,7 @@ export default async function getPostText() {
   const invalidLinkReg = /\S*(\.com|\.ca|\.org|\.net)\S*(…|\.\.\.)/g;
   const nbcsphillyReg = /@nbcsphilly/g; // Regex example for a substitution within the post text. Can be helpful for if you want to replace an X/Twitter handle with the user's name
 
-  const awaitTweet = await mastodon.getStatuses("109705347039296818", {
+  const awaitTweet = await mastodon.getStatuses('109705347039296818', {
     limit: limitVal,
   }); //Use the Mastodon API to get a specified number of recent posts from the Mastodon API.
   const string = JSON.stringify(awaitTweet); // Convert the post into a JSON string.
@@ -49,58 +49,58 @@ export default async function getPostText() {
     for (let j = 0; j < 4; j++) {
       if (objJSON[i].media_attachments[j] !== undefined) {
         if (
-          objJSON[i].media_attachments[j].type === "image" ||
-          objJSON[i].media_attachments[j].type === "gifv" ||
-          objJSON[i].media_attachments[j].type === "video"
+          objJSON[i].media_attachments[j].type === 'image' ||
+          objJSON[i].media_attachments[j].type === 'gifv' ||
+          objJSON[i].media_attachments[j].type === 'video'
         ) {
           postUrlArr.push(objJSON[i].media_attachments[j].url);
         } else {
-          postUrlArr.push("None");
+          postUrlArr.push('None');
         }
 
         if (
-          objJSON[i].media_attachments[j].type === "video" ||
-          objJSON[i].media_attachments[j].type === "gifv"
+          objJSON[i].media_attachments[j].type === 'video' ||
+          objJSON[i].media_attachments[j].type === 'gifv'
         ) {
           postAltTextArr.push(
             `${objJSON[i].media_attachments[j].meta.original.width}@#*${objJSON[i].media_attachments[j].meta.original.height}@#*${objJSON[i].media_attachments[j].meta.original.duration}@#*${objJSON[i].media_attachments[j].preview_url}`,
           );
         } else if (objJSON[i].media_attachments[j].description == null) {
-          postAltTextArr.push("None");
+          postAltTextArr.push('None');
         } else {
           postAltTextArr.push(objJSON[i].media_attachments[j].description);
         }
       } else {
-        postUrlArr.push("None");
-        postAltTextArr.push("None");
+        postUrlArr.push('None');
+        postAltTextArr.push('None');
       }
     }
-    const postUrl = postUrlArr.join("!^&");
-    const postAltText = postAltTextArr.join("!^&");
+    const postUrl = postUrlArr.join('!^&');
+    const postAltText = postAltTextArr.join('!^&');
     urlArr.push(postUrl);
     altTextArr.push(postAltText);
     const contentJSON = objJSON[i].content; // Filter through all the values of the JSON object, to get just the content of post i.
     let contentString = JSON.stringify(contentJSON); // Convert the content of the post into a JSON string.
     contentString = contentString.slice(1, -1); // Remove the quotation marks.
-    contentString = contentString.replace(pReg, "\n\n");
-    contentString = contentString.replace(brReg, "\n");
+    contentString = contentString.replace(pReg, '\n\n');
+    contentString = contentString.replace(brReg, '\n');
     contentString = contentString.replace(quoteReg, `"`);
-    contentString = contentString.replace(andReg, "&"); //Use the ", &, <p>, and <br> regexes to apply appropriate formatting. Then use the general regex to remove the HTML formatting from the mastodon post.
-    contentString = contentString.replace(logoReg, "");
-    contentString = contentString.replace(twitterReg, "");
-    contentString = contentString.replace(sportsBotsReg, "");
+    contentString = contentString.replace(andReg, '&'); //Use the ", &, <p>, and <br> regexes to apply appropriate formatting. Then use the general regex to remove the HTML formatting from the mastodon post.
+    contentString = contentString.replace(logoReg, '');
+    contentString = contentString.replace(twitterReg, '');
+    contentString = contentString.replace(sportsBotsReg, '');
     contentString = contentString.replace(
       nhlflyersReg,
-      "notflyers.bsky.social",
+      'notflyers.bsky.social',
     );
-    contentString = contentString.replace(tagReg, "");
-    contentString = contentString.replace(nbcsphillyReg, "NBCSP");
+    contentString = contentString.replace(tagReg, '');
+    contentString = contentString.replace(nbcsphillyReg, 'NBCSP');
 
     if (
-      contentString.includes("RT ") ||
-      contentString.includes("Retweet ") ||
-      contentString.includes("retweet ") ||
-      contentString.includes("RETWEET ")
+      contentString.includes('RT ') ||
+      contentString.includes('Retweet ') ||
+      contentString.includes('retweet ') ||
+      contentString.includes('RETWEET ')
     ) {
       contentString = `${contentString}\n\n (Offer not valid on Bluesky.)`;
     }
@@ -115,21 +115,21 @@ export default async function getPostText() {
       postCardArr.push(objJSON[i].card.title);
       postCardArr.push(objJSON[i].card.description);
       postCardArr.push(objJSON[i].card.image);
-      const postCard = postCardArr.join("!^&");
+      const postCard = postCardArr.join('!^&');
       cardArr.push(postCard);
     } else {
-      cardArr.push("None");
+      cardArr.push('None');
     }
     stringArr.push(contentString); // Add the regexed content to the array of plaintexts.
   }
   //urlArr[27] = "None!^&None!^&None!^&None";
   //altTextArr[27] = "None!^&None!^&None!^&None";
 
-  const urls = urlArr.join("@#%");
-  const strings = stringArr.join("@#%"); // Turn the string array into a single string by joining them with a \/ delimiter. This will be undone when used by bot functions.
-  const alts = altTextArr.join("@#%");
-  const cards = cardArr.join("@#%");
+  const urls = urlArr.join('@#%');
+  const strings = stringArr.join('@#%'); // Turn the string array into a single string by joining them with a \/ delimiter. This will be undone when used by bot functions.
+  const alts = altTextArr.join('@#%');
+  const cards = cardArr.join('@#%');
   const urlsStringsAltsCardsArr = [urls, strings, alts, cards];
-  const urlsStringsAltsCards = urlsStringsAltsCardsArr.join("~~~");
+  const urlsStringsAltsCards = urlsStringsAltsCardsArr.join('~~~');
   return urlsStringsAltsCards; // Return this singular concatenated string.
 }

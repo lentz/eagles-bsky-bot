@@ -5,9 +5,9 @@ import type {
   AppBskyFeedPost,
   AtpAgentLoginOpts,
   AtpAgentOptions,
-} from "@atproto/api";
-import { AtpAgent, RichText } from "@atproto/api";
-import { bskyAccount, bskyService } from "./config.ts";
+} from '@atproto/api';
+import { AtpAgent, RichText } from '@atproto/api';
+import { bskyAccount, bskyService } from './config.ts';
 
 type BotOptions = {
   service: string | URL;
@@ -45,10 +45,10 @@ export default class Bot {
 
     returns: void
   */
-  constructor(_service: AtpAgentOptions["service"]) {
-    this.userAgent = new AtpAgent({ service: "https://bsky.social" }); // Initialize the Bluesky agent on the specified service. Allows us to interface with the Bluesky API.
-    this.rootCid = ""; // Initialize the root CID as the empty string. Only define this as a value when attempting to post a reply.
-    this.rootUri = ""; // Initialize the root URI as the empty string. Only define this as a value when attempting to post a reply.
+  constructor(_service: AtpAgentOptions['service']) {
+    this.userAgent = new AtpAgent({ service: 'https://bsky.social' }); // Initialize the Bluesky agent on the specified service. Allows us to interface with the Bluesky API.
+    this.rootCid = ''; // Initialize the root CID as the empty string. Only define this as a value when attempting to post a reply.
+    this.rootUri = ''; // Initialize the root URI as the empty string. Only define this as a value when attempting to post a reply.
   }
 
   /*
@@ -84,11 +84,11 @@ export default class Bot {
     text:
       | string
       | (Partial<AppBskyFeedPost.Record> &
-          Omit<AppBskyFeedPost.Record, "createdAt">),
+          Omit<AppBskyFeedPost.Record, 'createdAt'>),
   ): Promise<void> {
     const postNum = 20; // Specify the number of recent posts to compare from the logged in user's feed.
     const bskyFeedAwait = await this.userAgent.app.bsky.feed.getAuthorFeed({
-      actor: "CHANGETHIS.bsky.social",
+      actor: 'CHANGETHIS.bsky.social',
       limit: postNum,
     }); // Get a defined number + 2 of most recent posts from the logged in user's feed.
     const bskyFeed = bskyFeedAwait.data.feed; // Filter down the await values so we are only looking at the feeds.
@@ -101,14 +101,14 @@ export default class Bot {
       const bskyRecord = bskyPost.post.record; // Filter post i down so we are only considering the record.
       const bskyEntries = Object.entries(bskyRecord); // Accessing the values from here is weird, so I put them all in an array and access the one corresponding to text (0,1).
       const bskyText = bskyEntries[bskyEntries.length - 1][1];
-      if (text === bskyText || text === "") {
+      if (text === bskyText || text === '') {
         // Check if the text we are trying to post has already been posted in the last postNum posts, or is empty. Might change empty conditional if I get images working.
         console.log(`failed on case ${i} in video post`);
         return;
       }
     }
 
-    const metadataArr = alt.split("@#*");
+    const metadataArr = alt.split('@#*');
 
     // Fetch the video as a buffer
     const videoBuffer = await fetchBuffer(url);
@@ -119,17 +119,17 @@ export default class Bot {
     );
 
     if (!data?.blob) {
-      throw new Error("Failed to upload video: no blob returned.");
+      throw new Error('Failed to upload video: no blob returned.');
     }
 
-    console.log("Video uploaded, posting...");
+    console.log('Video uploaded, posting...');
 
-    if (typeof text === "string") {
+    if (typeof text === 'string') {
       const _postResponse = await this.userAgent.post({
         text: text,
-        langs: ["en"],
+        langs: ['en'],
         embed: {
-          $type: "app.bsky.embed.video",
+          $type: 'app.bsky.embed.video',
           video: data.blob,
           aspectRatio: {
             width: parseInt(metadataArr[0], 10),
@@ -148,23 +148,23 @@ export default class Bot {
     text:
       | string
       | (Partial<AppBskyFeedPost.Record> &
-          Omit<AppBskyFeedPost.Record, "createdAt">),
+          Omit<AppBskyFeedPost.Record, 'createdAt'>),
   ) {
     let img: $Typed<AppBskyEmbedImages.Main> | undefined;
-    const urls = url.split("!^&");
-    const alts = alt.split("!^&");
-    const cards = card.split("!^&");
+    const urls = url.split('!^&');
+    const alts = alt.split('!^&');
+    const cards = card.split('!^&');
     let cardEmbed: $Typed<AppBskyEmbedExternal.Main> | undefined;
 
     const { data: serviceAuth } =
       await this.userAgent.com.atproto.server.getServiceAuth({
-        aud: "did:web:video.bsky.app",
-        lxm: "app.bsky.video.getUploadLimits",
+        aud: 'did:web:video.bsky.app',
+        lxm: 'app.bsky.video.getUploadLimits',
         exp: Date.now() / 1000 + 60 * 30,
       });
     const token = serviceAuth.token;
     const limitsUrl =
-      "https://video.bsky.app/xrpc/app.bsky.video.getUploadLimits";
+      'https://video.bsky.app/xrpc/app.bsky.video.getUploadLimits';
     const limitsResponse = await fetch(limitsUrl, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -176,34 +176,34 @@ export default class Bot {
     const limits = await limitsResponse.json();
 
     if (
-      urls[0].slice(-3) === "mp4" &&
-      parseFloat(alts[0].split("@#*")[2]) < 60 &&
+      urls[0].slice(-3) === 'mp4' &&
+      parseFloat(alts[0].split('@#*')[2]) < 60 &&
       limits.canUpload === true
     ) {
       await this.postVideo(false, urls[0], alts[0], text);
       return 37;
     } else {
-      if (urls[0].slice(-3) === "mp4") {
-        urls[0] = alts[0].split("@#*")[3];
+      if (urls[0].slice(-3) === 'mp4') {
+        urls[0] = alts[0].split('@#*')[3];
         if (limits.canUpload === false) {
           alts[0] =
-            "The bot has posted its maximum number of videos for the day. This is the thumbnail of the video instead.";
+            'The bot has posted its maximum number of videos for the day. This is the thumbnail of the video instead.';
         } else {
           alts[0] =
-            "The video is too long to be posted on Bluesky. This is the thumbnail of the video instead.";
+            'The video is too long to be posted on Bluesky. This is the thumbnail of the video instead.';
         }
       }
-      if (card !== "None" && urls[0] === "None") {
+      if (card !== 'None' && urls[0] === 'None') {
         let cardBuffer = await fetchBuffer(cards[3]);
         if (cardBuffer.length > 1000000) {
-          console.log("file too big");
+          console.log('file too big');
           cardBuffer = await fetchBuffer(
-            "https://media.d3.nhle.com/image/private/t_ratio16_9-size50/v1697721957/prd/assets/flyers/assets/phi_2568x1144.png",
+            'https://media.d3.nhle.com/image/private/t_ratio16_9-size50/v1697721957/prd/assets/flyers/assets/phi_2568x1144.png',
           );
         }
         const cardUpload = await this.userAgent.com.atproto.repo.uploadBlob(
           new Uint8Array(cardBuffer),
-          { encoding: "image/png" },
+          { encoding: 'image/png' },
         );
         const cardObj = {
           uri: cards[0],
@@ -211,37 +211,37 @@ export default class Bot {
           description: cards[2],
           thumb: cardUpload.data.blob,
         };
-        cardEmbed = { $type: "app.bsky.embed.external", external: cardObj };
+        cardEmbed = { $type: 'app.bsky.embed.external', external: cardObj };
       }
 
       for (let i = 0; i < 4; i++) {
-        if (urls[i] !== "None") {
+        if (urls[i] !== 'None') {
           const buffer = await fetchBuffer(urls[i]);
           if (buffer.length <= 1000000) {
             const upload = await this.userAgent.com.atproto.repo.uploadBlob(
               new Uint8Array(buffer),
-              { encoding: "image/png" },
+              { encoding: 'image/png' },
             );
             if (img === undefined) {
-              if (alts[i] !== "None") {
+              if (alts[i] !== 'None') {
                 img = {
                   images: [{ image: upload.data.blob, alt: alts[i] }],
-                  $type: "app.bsky.embed.images",
+                  $type: 'app.bsky.embed.images',
                 };
               } else {
                 img = {
-                  images: [{ image: upload.data.blob, alt: "" }],
-                  $type: "app.bsky.embed.images",
+                  images: [{ image: upload.data.blob, alt: '' }],
+                  $type: 'app.bsky.embed.images',
                 };
               }
             } else {
-              if (alts[i] !== "None") {
+              if (alts[i] !== 'None') {
                 img.images.push({
                   image: upload.data.blob,
                   alt: alts[i],
                 });
               } else {
-                img.images.push({ image: upload.data.blob, alt: "" });
+                img.images.push({ image: upload.data.blob, alt: '' });
               }
             }
           }
@@ -250,23 +250,23 @@ export default class Bot {
 
       const postNum = 20; // Specify the number of recent posts to compare from the logged in user's feed.
       const bskyFeedAwait = await this.userAgent.app.bsky.feed.getAuthorFeed({
-        actor: "notflyers.bsky.social",
+        actor: 'notflyers.bsky.social',
         limit: postNum,
       }); // Get a defined number + 2 of most recent posts from the logged in user's feed.
       const bskyFeed = bskyFeedAwait.data.feed; // Filter down the await values so we are only looking at the feeds.
       const bskyFeed0 = bskyFeed[0]; // Select post 0, the most recent post made by this user.
       const bskyPost0 = bskyFeed0.post; // Filter down the values of the post so we can look at the params.
-      let parentId = { uri: "", cid: "" }; // Initialize the parent ID as 2 empty strings. This should never matter, because it shouldn't be possible to use parentId without assigning it.
+      let parentId = { uri: '', cid: '' }; // Initialize the parent ID as 2 empty strings. This should never matter, because it shouldn't be possible to use parentId without assigning it.
       if (isReply === false) {
         // Check if this is not a reply, meaning it is a root post.
-        this.rootUri = ""; // Reset the root URI to the empty string, since we are no longer replying under a previous post.
-        this.rootCid = ""; // Reset the root CID to the empty string, since we are no longer replying under a previous post.
+        this.rootUri = ''; // Reset the root URI to the empty string, since we are no longer replying under a previous post.
+        this.rootCid = ''; // Reset the root CID to the empty string, since we are no longer replying under a previous post.
       } // If this is a reply
       else {
         const bskyUri = bskyPost0.uri; // Collect the URI from the most recent post by the logged in user.
         const bskyCid = bskyPost0.cid; // Collect the CID from the most recent post by the logged in user.
         parentId = { uri: bskyUri, cid: bskyCid }; // Create an ID object using the URI and CID from the most recent post.
-        if (this.rootUri === "") {
+        if (this.rootUri === '') {
           // Only change the root once per thread. Root stays constant regardless of if this is post 2 or post 37.
           this.rootUri = bskyUri; // Change the root URI to be the most recent post's URI.
           this.rootCid = bskyCid; // Change the root CID to be the most recent post's CID.
@@ -281,36 +281,36 @@ export default class Bot {
         const bskyRecord = bskyPost.post.record; // Filter post i down so we are only considering the record.
         const bskyEntries = Object.entries(bskyRecord); // Accessing the values from here is weird, so I put them all in an array and access the one corresponding to text (0,1).
         const bskyText = bskyEntries[bskyEntries.length - 1][1];
-        if (text === bskyText || text === "") {
+        if (text === bskyText || text === '') {
           // Check if the text we are trying to post has already been posted in the last postNum posts, or is empty. Might change empty conditional if I get images working.
           console.log(`failed on case ${i}`);
-          return "37"; // Output an arbitrary value that can be treated as a fail code. Could be anything, I picked 37 because I like the number 37.
+          return '37'; // Output an arbitrary value that can be treated as a fail code. Could be anything, I picked 37 because I like the number 37.
         }
       }
-      if (typeof text === "string") {
+      if (typeof text === 'string') {
         // Check that text is a string (This should always be the case in this codebase, but it seems to break if I get rid of the option for it to not be.)
         const richText = new RichText({ text }); // Create a new RichText object from our text string. Sorta arcane object type detailed in ATProto API.
         await richText.detectFacets(this.userAgent); // Detect facets from the agent.
         let record: Partial<AppBskyFeedPost.Record> &
-          Omit<AppBskyFeedPost.Record, "createdAt">; // Create empty record variable that we will put our post details into.
+          Omit<AppBskyFeedPost.Record, 'createdAt'>; // Create empty record variable that we will put our post details into.
         if (isReply === true) {
           // If we are trying to post a reply
           const rootId = { uri: this.rootUri, cid: this.rootCid }; // Format the root URI and root CID from the public object variables into a form that can be used.
-          if (urls[0] !== "None") {
+          if (urls[0] !== 'None') {
             record = {
               text: richText.text, // Specify the text of our post as the text in the RichText obj (should be our plaintext string)
               facets: richText.facets, // Specify the facets of our post to be the facets of the RichText.
               reply: { root: rootId, parent: parentId }, // Specify the reply details. Make the root the values from our public root variables, make the parent the ID values collected from this function (the ones from the most recent post)
               embed: img,
             };
-          } else if (card !== "None") {
+          } else if (card !== 'None') {
             record = {
               text: richText.text, // Specify the text of our post as the text in the RichText obj (should be our plaintext string)
               facets: richText.facets, // Specify the facets of our post to be the facets of the RichText.
               reply: { root: rootId, parent: parentId }, // Specify the reply details. Make the root the values from our public root variables, make the parent the ID values collected from this function (the ones from the most recent post)
               embed: cardEmbed,
             };
-            console.log("record with card");
+            console.log('record with card');
             console.log(record);
           } else {
             record = {
@@ -321,24 +321,24 @@ export default class Bot {
           }
         } // If we are trying to post a root post
         else {
-          if (urls[0] !== "None") {
-            console.log("there is a url.");
+          if (urls[0] !== 'None') {
+            console.log('there is a url.');
             record = {
               text: richText.text, // Specify the text of our post as the text in the RichText obj (should be our plaintext string)
               facets: richText.facets, // Specify the facets of our post to be the facets of the RichText.
               embed: img,
             };
-          } else if (card !== "None") {
-            console.log("there is a card.");
+          } else if (card !== 'None') {
+            console.log('there is a card.');
             record = {
               text: richText.text, // Specify the text of our post as the text in the RichText obj (should be our plaintext string)
               facets: richText.facets, // Specify the facets of our post to be the facets of the RichText.
               embed: cardEmbed,
             };
-            console.log("record with card");
+            console.log('record with card');
             console.log(record);
           } else {
-            console.log("no url or card");
+            console.log('no url or card');
             record = {
               text: richText.text, // Specify the text of our post as the text in the RichText obj (should be our plaintext string)
               facets: richText.facets, // Specify the facets of our post to be the facets of the RichText.
@@ -376,11 +376,11 @@ export default class Bot {
     await bot.login(bskyAccount); // Log the bot into the specified Bluesky account determined by the bskyAccount value.
     const mastodonAwait = await getPostText(); // Get the desired number of recent Mastodon posts from the specified user in getPostText.
 
-    const urlsStringsAltsCardsArr = mastodonAwait.split("~~~");
-    const mastUrlArr = urlsStringsAltsCardsArr[0].split("@#%");
-    const mastodonArr = urlsStringsAltsCardsArr[1].split("@#%");
-    const mastAltArr = urlsStringsAltsCardsArr[2].split("@#%");
-    const mastCardArr = urlsStringsAltsCardsArr[3].split("@#%");
+    const urlsStringsAltsCardsArr = mastodonAwait.split('~~~');
+    const mastUrlArr = urlsStringsAltsCardsArr[0].split('@#%');
+    const mastodonArr = urlsStringsAltsCardsArr[1].split('@#%');
+    const mastAltArr = urlsStringsAltsCardsArr[2].split('@#%');
+    const mastCardArr = urlsStringsAltsCardsArr[3].split('@#%');
 
     if (!dryRun) {
       // Make sure that we don't wanna run the bot without posting. Tbh, I think I might have broken this feature through my changes to the source code. May need to reimplement dry run as a working option when I generalize the code for other purposes.
@@ -404,11 +404,11 @@ export default class Bot {
           }
         } // Complicated case where a post is longer than 300 characters, longer than a valid Bluesky post.
         else {
-          const wordArr = mastodonArr[i].split(" "); // Turn the string into an array of words parsed by spaces.
+          const wordArr = mastodonArr[i].split(' '); // Turn the string into an array of words parsed by spaces.
           let chunkLen = 0; // Initialize the length of a chunk to 0.
           let chunkArr = []; // Initialize the array storing the words contained in the chunk to be empty.
           const threadArr = []; // Initialize the array storing the chunk strings to be empty.
-          let chunkStr = ""; // Initialize the chunk string to be empty.
+          let chunkStr = ''; // Initialize the chunk string to be empty.
           while (wordArr.length !== 0) {
             // Loop while there are still words in the array to chunk.
             if (chunkLen + wordArr[0].length <= 294) {
@@ -417,13 +417,13 @@ export default class Bot {
               chunkArr.push(wordArr.shift()); // Add the new word to the end of the chunk array, while also removing it from the front of the word array.
             } // If the max length is surpassed by adding the next word to the chunk:
             else {
-              chunkStr = chunkArr.join(" "); // Turn the chunk into a string by delimiting the words with spaces.
+              chunkStr = chunkArr.join(' '); // Turn the chunk into a string by delimiting the words with spaces.
               chunkArr = []; // Empty the chunk array.
               chunkLen = 0; // Reset the chunk length to 0.
               threadArr.push(chunkStr); // Add the chunk string to the thread array.
             }
           }
-          chunkStr = chunkArr.join(" "); // Turn the last chunk into a string by delimiting the words with spaces.
+          chunkStr = chunkArr.join(' '); // Turn the last chunk into a string by delimiting the words with spaces.
           threadArr.push(chunkStr); // Add the last chunk string to the thread array.
           let isReply = false; // Create a boolean value to determine if we want to post a root post or a reply. Start with a root post.
           for (
@@ -444,8 +444,8 @@ export default class Bot {
             if (isReply === false) {
               // If this post was posted as a root, meaning that this is the first iteration:
               isReply = true; // Set the boolean value to post as replies for the remaining iterations.
-              mastUrlArr[i] = "None!^&None!^&None!^&None";
-              mastAltArr[i] = "None!^&None!^&None!^&None";
+              mastUrlArr[i] = 'None!^&None!^&None!^&None';
+              mastAltArr[i] = 'None!^&None!^&None!^&None';
             }
           }
         }
@@ -453,10 +453,10 @@ export default class Bot {
       if (postCount === mastodonArr.length) {
         await bot.post(
           false,
-          "None!^&None!^&None!^&None",
-          "None!^&None!^&None!^&None",
-          "None",
-          "ERROR: Repost Detection Glitch.",
+          'None!^&None!^&None!^&None',
+          'None!^&None!^&None!^&None',
+          'None',
+          'ERROR: Repost Detection Glitch.',
         );
       }
     }
