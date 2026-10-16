@@ -165,7 +165,7 @@ The following files in this bot **do not** need to be edited to run properly, an
   * Note: The license details from Phil Nash's Bluesky bot repository is included in this template because his work is the basis for this repository and the license he specified applies.
 * / README.md
   * Note: As this is a text file meant to give you the necessary information to set up your Bluesky mirror bot, technically, you can change anything in here and the bot will still run properly. That said, if you make your repository public or make it private and intend to link to it anywhere, **do not** remove the credits section at the top.
-* / eslint.config.js
+* / biome.json
 * / package-lock.json
 * / package.json
 * / tsconfig.json

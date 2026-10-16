@@ -1,6 +1,6 @@
 import { env } from "node:process";
-import { z } from "zod";
 import type { AtpAgentLoginOpts } from "@atproto/api";
+import { z } from "zod";
 
 const envSchema = z.object({
   BSKY_HANDLE: z.string().min(1),

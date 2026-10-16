@@ -5,22 +5,10 @@
   "main": "src/index.ts",
   "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "lint": "eslint src/",
+    "lint": "biome check src/",
     "watch": "tsc --watch",
     "start": "node src/index.ts",
     "dev": "node --watch src/index.ts"
-  },
-  "keywords": [
-    "bsky",
-    "bluesky",
-    "atproto",
-    "bot"
-  ],
-  "author": {
-    "name": "Phil Nash",
-    "email": "philnash@gmail.com",
-    "url": "https://philna.sh/"
   },
   "license": "MIT",
   "dependencies": {
@@ -30,11 +18,8 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.15",
     "@types/node": "^18.16.2",
-    "@typescript-eslint/eslint-plugin": "^5.59.1",
-    "@typescript-eslint/parser": "^5.59.1",
-    "eslint": "^8.39.0",
-    "eslint-plugin-sonarjs": "^0.19.0",
     "typescript": "^7.0.2"
   }
 }
