@@ -1,14 +1,13 @@
 import type {
+  $Typed,
   AppBskyEmbedExternal,
   AppBskyEmbedImages,
   AppBskyFeedPost,
   AtpAgentLoginOpts,
   AtpAgentOptions,
 } from "@atproto/api";
-import atproto, { AtpAgent } from "@atproto/api";
+import { AtpAgent, RichText } from "@atproto/api";
 import { bskyAccount, bskyService } from "./config.ts";
-
-const { RichText } = atproto;
 
 type BotOptions = {
   service: string | URL;
@@ -151,11 +150,11 @@ export default class Bot {
       | (Partial<AppBskyFeedPost.Record> &
           Omit<AppBskyFeedPost.Record, "createdAt">),
   ) {
-    let img: AppBskyEmbedImages.Main | undefined;
+    let img: $Typed<AppBskyEmbedImages.Main> | undefined;
     const urls = url.split("!^&");
     const alts = alt.split("!^&");
     const cards = card.split("!^&");
-    let cardEmbed: AppBskyEmbedExternal.Main | undefined;
+    let cardEmbed: $Typed<AppBskyEmbedExternal.Main> | undefined;
 
     const { data: serviceAuth } =
       await this.userAgent.com.atproto.server.getServiceAuth({

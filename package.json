@@ -12,13 +12,13 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@atproto/api": "^0.13.12",
+    "@atproto/api": "^0.27.0",
     "tsl-mastodon-api": "^0.5.2",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
-    "@types/node": "^18.16.2",
+    "@types/node": "^24.19.2",
     "typescript": "^7.0.2"
   }
 }
