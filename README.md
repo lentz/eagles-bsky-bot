@@ -61,13 +61,6 @@ This can be toggled on and off (`false` or `true`, respectively) for any reason 
 
 **What to change:** Set `POST_LIMIT` in `.env` to a positive whole number to change the count.
 
-#### 🔷 Line 84
-`var bskyFeedAwait = await this.userAgent.app.bsky.feed.getAuthorFeed({actor: "CHANGETHIS.bsky.social", limit: postLimit,});`
-
-**Purpose:** Tells the bot which Bluesky account's feed to compare the posts from the specified Mastodon account to.
-
-**What to change:** Put the Bluesky handle of the account you have set up for your mirror bot (ex. notphillies.bsky.social) in place of `CHANGETHIS.bsky.social`.
-
 #### 🔷 Line 149 (Change if/when Bluesky updates their video length limit from 3 minutes)
 `if (urls[0].slice(-3) == "mp4" && parseFloat(alts[0].split("@#*")[2]) < 180 && limits.canUpload == true)`
 
@@ -105,11 +98,9 @@ Never store the token directly in source code. For GitHub Actions, add the secre
 **What to change:** Rename the regex `nhlflyerReg` to anything you want in the format of `nameReg`, then replace `@nhlflyers@sportsbots.xyz` with the Mastodon handle your bot is mirroring. It is likely the same as a the X/Twitter handle with "@sportsbots.xyz" at the end.
 
 #### 🔷 Line 87
-`contentString = contentString.replace(nhlflyersReg, "notflyers.bsky.social");`
+`contentString = contentString.replace(nhlflyersReg, config.bskyHandle);`
 
-**Purpose:** Tells the bot what to replace the text specified by `nhlflyersReg` with
-
-**What to change:** After editing Line 25, go to Line 87. Replace `nhlflyersReg` with whatever you renamed your regex in Line 25. Replace `notflyers.bsky.social` with the handle of your Bluesky mirror bot account.
+**Purpose:** Replaces the configured Mastodon handle with the Bluesky handle from `BSKY_HANDLE`.
 
 #### 🔷 Line 28 (Optional)
 `var nbcsphillyReg = new RegExp("@nbcsphilly", "g");`

@@ -88,10 +88,7 @@ export default async function getPostText() {
     contentString = contentString.replace(logoReg, '');
     contentString = contentString.replace(twitterReg, '');
     contentString = contentString.replace(sportsBotsReg, '');
-    contentString = contentString.replace(
-      nhlflyersReg,
-      'notflyers.bsky.social',
-    );
+    contentString = contentString.replace(nhlflyersReg, config.bskyHandle);
     contentString = contentString.replace(tagReg, '');
     contentString = contentString.replace(nbcsphillyReg, 'NBCSP');
 

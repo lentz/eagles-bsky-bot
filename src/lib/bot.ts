@@ -87,7 +87,7 @@ export default class Bot {
           Omit<AppBskyFeedPost.Record, 'createdAt'>),
   ): Promise<void> {
     const bskyFeedAwait = await this.userAgent.app.bsky.feed.getAuthorFeed({
-      actor: 'CHANGETHIS.bsky.social',
+      actor: config.bskyHandle,
       limit: config.postLimit,
     }); // Get a defined number + 2 of most recent posts from the logged in user's feed.
     const bskyFeed = bskyFeedAwait.data.feed; // Filter down the await values so we are only looking at the feeds.
@@ -248,7 +248,7 @@ export default class Bot {
       }
 
       const bskyFeedAwait = await this.userAgent.app.bsky.feed.getAuthorFeed({
-        actor: 'notflyers.bsky.social',
+        actor: config.bskyHandle,
         limit: config.postLimit,
       }); // Get a defined number + 2 of most recent posts from the logged in user's feed.
       const bskyFeed = bskyFeedAwait.data.feed; // Filter down the await values so we are only looking at the feeds.
