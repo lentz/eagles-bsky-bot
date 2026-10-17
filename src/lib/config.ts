@@ -12,6 +12,7 @@ const envSchema = z.object({
   BSKY_PASSWORD: z.string().min(1),
   MASTODON_ACCESS_TOKEN: z.string().min(1),
   BSKY_SERVICE: z.string().min(1).default('https://bsky.social'),
+  POST_LIMIT: z.coerce.number().int().positive().default(20),
 });
 
 const parsed = envSchema.parse(env);
@@ -23,3 +24,4 @@ export const bskyAccount: AtpAgentLoginOpts = {
 
 export const bskyService = parsed.BSKY_SERVICE;
 export const mastodonAccessToken = parsed.MASTODON_ACCESS_TOKEN;
+export const postLimit = parsed.POST_LIMIT;

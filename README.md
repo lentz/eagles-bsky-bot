@@ -2,16 +2,6 @@
 
 This is a template repo for building a [Bluesky](https://bsky.app/) bot that mirrors an X/Twitter account by pulling from existing [sports mirror bots on Mastodon](sportsbots.xyz) as a work around for lack of access Twitter's API.
 
-## Table of Contents
-* [Credits](https://github.com/AceOfBens/sports-mirror-bot-bsky/blob/main/README.md#Credits)
-* [Instructions](https://github.com/AceOfBens/sports-mirror-bot-bsky/blob/main/README.md#Instructions)
-* [FAQ](https://github.com/AceOfBens/sports-mirror-bot-bsky/blob/main/README.md#FAQ)
-
-## Credits
-* [Phil Nash](https://github.com/philnash) for providing the code for building a bot that posts on its own schedule. [Phil Nash's Bluesky bot template](https://github.com/philnash/bsky-bot)
-* [acarters](https://github.com/acarters) for providing the code for building a bot that mirrors a X/Twitter account by pulling from existing mirror bots on Mastodon, due to the access restrictions on X's API. Most of the notes in the code that explain what each line does are from him.
-* I ([Ben Ace](https://bsky.app/profile/aceofbens.com/)) cannot stress enough how much I didn't do much to this code and can't take credit for any the building of this repo, but I did edit this template and outline the instructions below! I am not a developer but a [graphic designer](https://aceofbens.com/) whose coding experience ends at tinkering with HTML and CSS on WordPress once in a while.
-
 ## Instructions
 
 Below, I outline the lines in each file where you will need to plug in information to tell the Bluesky account you have set up for your mirror bot to pull from the correct Mastodon account, as well as a few features that do not need to be changed for the bot to operate but are helpful to know about in case you want to change the settings. Not all files need to edited (only 3 in total!), and, in fact, most of them should not be touched unless you are a developer who knows what you are doing!
@@ -64,19 +54,15 @@ For local development, copy `.env.example` to `.env` and fill in the values. The
 
 This can be toggled on and off (`false` or `true`, respectively) for any reason in the future, such as if you are editing the code and want to avoid the possibility of the bot automatically running before you've fixed the bug or changed whatever settings you're trying to update.
 
-#### 🔷 Line 83 (optional/if needed)
-`var postNum = 20;`
+#### 🔷 `POST_LIMIT` (optional)
+`POST_LIMIT=20`
 
-**Purpose:** Tells the bot how many posts to check on the Mastodon account when checking for updates.
+**Purpose:** Sets how many recent posts to fetch from Mastodon and check in the Bluesky feed. It defaults to `20`.
 
-**What <ins>can</ins> change:** I (Ben Ace) have temporarily lowered this number to 5 (or even lower) when I've decided to update other settings in a way that would cause the bot to double post. 
-
-For example, I add settings for the bot to substitute players' X/Twitter handles with their first and last name in the Bluesky post. When a new player joins the team, and the team account tags them, I will add them to the list of substitutions. If the Bluesky post has already received engagement (quotes, reposts, replies), typically, I will leave it up, and if it is in the 20 most recent posts from the Mastodon mirror bot, this Bluesky bot will double post with the newly added substitution.
-
-To work around this, I change this setting to a lower number (ex. if the post I don't want it to double post is the third most recent, I will change this setting to 2). Then, the next day, I will change it back to 20. Keep in mind that if the account you're mirroring posts frequently, setting this number too low will potentially result in missed posts.
+**What to change:** Set `POST_LIMIT` in `.env` to a positive whole number to change the count.
 
 #### 🔷 Line 84
-`var bskyFeedAwait = await this.userAgent.app.bsky.feed.getAuthorFeed({actor: "CHANGETHIS.bsky.social", limit: postNum,});`
+`var bskyFeedAwait = await this.userAgent.app.bsky.feed.getAuthorFeed({actor: "CHANGETHIS.bsky.social", limit: postLimit,});`
 
 **Purpose:** Tells the bot which Bluesky account's feed to compare the posts from the specified Mastodon account to.
 
@@ -95,13 +81,6 @@ To work around this, I change this setting to a lower number (ex. if the post I 
 **Purpose:** If the bot has trouble pulling a card from the source post and buffers for too long, this is the image it will post in place of the card.
 
 **What to change:** Currently, there is an image file with the Philadelphia Flyers logo on it in this setting. I have yet to see the bot post this photo, but just in case your bot does, change this photo to avoid embarrassment.
-
-#### 🔷 Line 218 (optional/if needed)
-`var postNum = 20`
-
-**Purpose:** Tells the bot how many posts to check on the Bluesky account when checking for updates.
-
-**What <ins>can</ins> change:** Same as for Line 83, this can be edited if you're trying something out. Personally, I haven't found a need to change Line 218 yet, but I wanted to point it out in case it's useful.
 
 ### [/ src / lib / getPostText.ts](src/lib/getPostText.ts)
 

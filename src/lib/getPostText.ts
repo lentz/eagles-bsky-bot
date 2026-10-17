@@ -1,5 +1,5 @@
 import * as Mastodon from 'tsl-mastodon-api';
-import { mastodonAccessToken } from './config.ts';
+import { mastodonAccessToken, postLimit } from './config.ts';
 
 const mastodon = new Mastodon.API({
   access_token: mastodonAccessToken,
@@ -16,8 +16,6 @@ const mastodon = new Mastodon.API({
 	returns: A string representing the desired text of the Bluesky posts we want to create. Text for different posts are delimited by \/ characters. 
 */
 export default async function getPostText() {
-  const limitVal = 20; // The number of posts to get from Mastodon.
-
   // Regex list to address formatting discrepancies between Mastodon posts and Bluesky posts
   const pReg = /<\/p><p>/g; // A regex to deal with <p></p>. This should create a new section in the text, which we do via 2 line breaks.
   const brReg = /<br>/g; // A regex to deal with <br>. This should go to the next line, which we do via a line break.
@@ -32,7 +30,7 @@ export default async function getPostText() {
   const nbcsphillyReg = /@nbcsphilly/g; // Regex example for a substitution within the post text. Can be helpful for if you want to replace an X/Twitter handle with the user's name
 
   const awaitTweet = await mastodon.getStatuses('109705347039296818', {
-    limit: limitVal,
+    limit: postLimit,
   }); //Use the Mastodon API to get a specified number of recent posts from the Mastodon API.
   const string = JSON.stringify(awaitTweet); // Convert the post into a JSON string.
   const objJSON = JSON.parse(string).json; // Convert the JSON string back to a JSON object. Kinda silly, but it doesn't work otherwise.
@@ -42,7 +40,7 @@ export default async function getPostText() {
   const cardArr = [];
   for (
     let i = 0;
-    i < limitVal;
+    i < postLimit;
     i++ // Iterate over all the posts we collected using the Mastodon API.
   ) {
     const postUrlArr = [];
