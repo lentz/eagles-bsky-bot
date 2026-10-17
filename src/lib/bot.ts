@@ -102,7 +102,9 @@ export default class Bot {
       const bskyText = bskyEntries[bskyEntries.length - 1][1];
       if (text === bskyText || text === '') {
         // Check if the text we are trying to post has already been posted in the last config.postLimit posts, or is empty. Might change empty conditional if I get images working.
-        console.log(`failed on case ${i} in video post`);
+        console.log(
+          `Skipping video post: empty text or duplicate of Bluesky feed entry ${i}.`,
+        );
         return;
       }
     }
@@ -279,7 +281,9 @@ export default class Bot {
         const bskyText = bskyEntries[bskyEntries.length - 1][1];
         if (text === bskyText || text === '') {
           // Check if the text we are trying to post has already been posted in the last config.postLimit posts, or is empty. Might change empty conditional if I get images working.
-          console.log(`failed on case ${i}`);
+          console.log(
+            `Skipping post: empty text or duplicate of Bluesky feed entry ${i}.`,
+          );
           return '37'; // Output an arbitrary value that can be treated as a fail code. Could be anything, I picked 37 because I like the number 37.
         }
       }
