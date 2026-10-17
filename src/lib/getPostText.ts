@@ -1,8 +1,8 @@
 import * as Mastodon from 'tsl-mastodon-api';
-import { mastodonAccessToken, postLimit } from './config.ts';
+import { config } from './config.ts';
 
 const mastodon = new Mastodon.API({
-  access_token: mastodonAccessToken,
+  access_token: config.mastodonAccessToken,
   api_url: 'https://mastodon.social/api/v1/',
 }); // access the Mastodon API using the access token.
 
@@ -30,7 +30,7 @@ export default async function getPostText() {
   const nbcsphillyReg = /@nbcsphilly/g; // Regex example for a substitution within the post text. Can be helpful for if you want to replace an X/Twitter handle with the user's name
 
   const awaitTweet = await mastodon.getStatuses('109705347039296818', {
-    limit: postLimit,
+    limit: config.postLimit,
   }); //Use the Mastodon API to get a specified number of recent posts from the Mastodon API.
   const string = JSON.stringify(awaitTweet); // Convert the post into a JSON string.
   const objJSON = JSON.parse(string).json; // Convert the JSON string back to a JSON object. Kinda silly, but it doesn't work otherwise.
@@ -40,7 +40,7 @@ export default async function getPostText() {
   const cardArr = [];
   for (
     let i = 0;
-    i < postLimit;
+    i < config.postLimit;
     i++ // Iterate over all the posts we collected using the Mastodon API.
   ) {
     const postUrlArr = [];

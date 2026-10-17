@@ -7,7 +7,7 @@ import type {
   AtpAgentOptions,
 } from '@atproto/api';
 import { AtpAgent, RichText } from '@atproto/api';
-import { bskyAccount, bskyService, postLimit } from './config.ts';
+import { config } from './config.ts';
 
 type BotOptions = {
   service: string | URL;
@@ -31,7 +31,7 @@ export default class Bot {
   public rootUri: string; // Public variable in the class to store the URI of the most recent non-reply post, the root we need for replies.
 
   static defaultOptions: BotOptions = {
-    service: bskyService, // Variable detailing the service we want to initialize the Bluesky agent on.
+    service: config.bskyService, // Variable detailing the service we want to initialize the Bluesky agent on.
     dryRun: true, // Change this to true if you want the bot to not actually post to Bluesky for testing purposes.
   } as const; // The options can't be changed mid-execution. Change these manually in source code if you want them to be different.
 
@@ -88,7 +88,7 @@ export default class Bot {
   ): Promise<void> {
     const bskyFeedAwait = await this.userAgent.app.bsky.feed.getAuthorFeed({
       actor: 'CHANGETHIS.bsky.social',
-      limit: postLimit,
+      limit: config.postLimit,
     }); // Get a defined number + 2 of most recent posts from the logged in user's feed.
     const bskyFeed = bskyFeedAwait.data.feed; // Filter down the await values so we are only looking at the feeds.
     for (
@@ -101,7 +101,7 @@ export default class Bot {
       const bskyEntries = Object.entries(bskyRecord); // Accessing the values from here is weird, so I put them all in an array and access the one corresponding to text (0,1).
       const bskyText = bskyEntries[bskyEntries.length - 1][1];
       if (text === bskyText || text === '') {
-        // Check if the text we are trying to post has already been posted in the last postLimit posts, or is empty. Might change empty conditional if I get images working.
+        // Check if the text we are trying to post has already been posted in the last config.postLimit posts, or is empty. Might change empty conditional if I get images working.
         console.log(`failed on case ${i} in video post`);
         return;
       }
@@ -249,7 +249,7 @@ export default class Bot {
 
       const bskyFeedAwait = await this.userAgent.app.bsky.feed.getAuthorFeed({
         actor: 'notflyers.bsky.social',
-        limit: postLimit,
+        limit: config.postLimit,
       }); // Get a defined number + 2 of most recent posts from the logged in user's feed.
       const bskyFeed = bskyFeedAwait.data.feed; // Filter down the await values so we are only looking at the feeds.
       const bskyFeed0 = bskyFeed[0]; // Select post 0, the most recent post made by this user.
@@ -280,7 +280,7 @@ export default class Bot {
         const bskyEntries = Object.entries(bskyRecord); // Accessing the values from here is weird, so I put them all in an array and access the one corresponding to text (0,1).
         const bskyText = bskyEntries[bskyEntries.length - 1][1];
         if (text === bskyText || text === '') {
-          // Check if the text we are trying to post has already been posted in the last postLimit posts, or is empty. Might change empty conditional if I get images working.
+          // Check if the text we are trying to post has already been posted in the last config.postLimit posts, or is empty. Might change empty conditional if I get images working.
           console.log(`failed on case ${i}`);
           return '37'; // Output an arbitrary value that can be treated as a fail code. Could be anything, I picked 37 because I like the number 37.
         }
@@ -371,7 +371,10 @@ export default class Bot {
       ? Object.assign({}, Bot.defaultOptions, botOptions) //Set the bot's options.
       : Bot.defaultOptions;
     const bot = new Bot(service); // Instantiate a constant bot value as a new Bot under the supplied Bluesky service.
-    await bot.login(bskyAccount); // Log the bot into the specified Bluesky account determined by the bskyAccount value.
+    await bot.login({
+      identifier: config.bskyHandle,
+      password: config.bskyPassword,
+    }); // Log the bot into the specified Bluesky account.
     const mastodonAwait = await getPostText(); // Get the desired number of recent Mastodon posts from the specified user in getPostText.
 
     const urlsStringsAltsCardsArr = mastodonAwait.split('~~~');

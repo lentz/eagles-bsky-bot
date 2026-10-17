@@ -1,6 +1,5 @@
 import { existsSync } from 'node:fs';
 import { env, loadEnvFile } from 'node:process';
-import type { AtpAgentLoginOpts } from '@atproto/api';
 import { z } from 'zod';
 
 if (existsSync('.env')) {
@@ -17,11 +16,10 @@ const envSchema = z.object({
 
 const parsed = envSchema.parse(env);
 
-export const bskyAccount: AtpAgentLoginOpts = {
-  identifier: parsed.BSKY_HANDLE,
-  password: parsed.BSKY_PASSWORD,
+export const config = {
+  bskyHandle: parsed.BSKY_HANDLE,
+  bskyPassword: parsed.BSKY_PASSWORD,
+  bskyService: parsed.BSKY_SERVICE,
+  mastodonAccessToken: parsed.MASTODON_ACCESS_TOKEN,
+  postLimit: parsed.POST_LIMIT,
 };
-
-export const bskyService = parsed.BSKY_SERVICE;
-export const mastodonAccessToken = parsed.MASTODON_ACCESS_TOKEN;
-export const postLimit = parsed.POST_LIMIT;
