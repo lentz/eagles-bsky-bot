@@ -1,47 +1,36 @@
 # Build your own Bluesky mirror bot 🦋
 
-This is a template repo for building a [Bluesky](https://bsky.app/) bot that mirrors an X/Twitter account by pulling from existing [sports mirror bots on Mastodon](sportsbots.xyz) as a work around for lack of access Twitter's API.
+This is a template repo for building a [Bluesky](https://bsky.app/) bot that mirrors an X/Twitter account by pulling from existing
+[sports mirror bots on Mastodon](sportsbots.xyz) as a workaround for lack of access to Twitter's API.
 
-## Instructions
+## Configuration
 
-Below, I outline the lines in each file where you will need to plug in information to tell the Bluesky account you have set up for your mirror bot to pull from the correct Mastodon account, as well as a few features that do not need to be changed for the bot to operate but are helpful to know about in case you want to change the settings. Not all files need to edited (only 3 in total!), and, in fact, most of them should not be touched unless you are a developer who knows what you are doing!
+For local development, copy `.env.example` to `.env` and set the values. The app loads `.env` if it exists; environment
+variables already set in the shell take precedence. Do not commit `.env`.
 
-### [/ .github / workflow / post.yml](.github/workflow/post.yml)
+| Variable | Required | Default | Description |
+| --- | --- | --- | --- |
+| `BSKY_HANDLE` | Yes | — | Bluesky account handle used to log in and identify the account's feed. |
+| `BSKY_PASSWORD` | Yes | — | Bluesky account password or app password. |
+| `MASTODON_ACCESS_TOKEN` | Yes | — | Mastodon API token with read access to statuses. Keep this secret. |
+| `MASTODON_HANDLE` | Yes | — | Mastodon account handle to replace with the Bluesky handle in mirrored post text, e.g. `@TEAM@sportsbots.xyz`. |
+| `BSKY_SERVICE` | No | `https://bsky.social` | Bluesky service endpoint. |
+| `POST_LIMIT` | No | `20` | Positive whole number of recent posts to fetch from Mastodon and check in the Bluesky feed. |
 
-#### 🔷 Line 4
-`- cron: "* * * */12 *`
+For GitHub Actions, add `BSKY_HANDLE`, `BSKY_PASSWORD`, and `MASTODON_ACCESS_TOKEN` under
+**Settings > Secrets and variables > Actions > Secrets**. Add `MASTODON_HANDLE` under **Variables**. The workflow
+currently uses the defaults for `BSKY_SERVICE` and `POST_LIMIT`; to override either in Actions, map it into the
+workflow's `env` from a repository variable.
 
-**Purpose:** This line tells the bot how often to run.
+### Workflow schedule
 
-**What to change:** This format can be confusing at first, but an easy way to help you visualize it is to use [crontab guru](https://crontab.guru/). Typically, I keep this setting at every 20 minutes, which would be `*/20 * * * *` by this format.
+The workflow's run frequency is configured by the `cron` expression in `.github/workflows/post.yml`. GitHub Actions can
+delay scheduled runs, so execution may not happen exactly on the requested minute.
 
-Whatever you set is what Github will use as a guideline, but from experience, I will tell you that no matter what you set, Github will run on its own timeline, meaning that if you schedule it to run every 20 minutes, then during the day (Eastern Time), it will run every 10 to 30 minutes, and on many evenings it will run every 30 minutes to 2 hours.
+### [/.github/workflows/post.yml](.github/workflows/post.yml)
 
-If the bot is slow to catch up, you can go to the Actions tab, select the most recent workflow (Post to Bluesky), and re-run all jobs to push the bot to run again, if you so wish.
-
-#### 🔷 Lines 14-15
-```
-- run: npm install tsl-mastodon-api
-```
-
-**Purpose:** These must be installed for the bot to run properly.
-
-**What to change:** After the bot runs successfully the first time, these two lines can be removed as they do not need to be installed on every workflow.
-
-#### 🔷 Lines 21-22
-```
-BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}
-BSKY_PASSWORD: ${{ secrets.BSKY_PASSWORD }}
-```
-
-**Purpose:** This gives the bot the login info for the Bluesky account you've set up for it.
-
-**What to change:** DO NOT edit these lines directly!! Instead of adding the username and password directly to the code, go to the repository's Settings > Secrets and variables (under the Security heading) > Actions > New repository secret
-
-For **Name**, type in `BSKY_HANDLE` or `BSKY_PASSWORD`
-For **Secret**, type in the handle (ex. @notphillies.bsky.social) or the password (can be the password you set up on Bluesky or an app password).
-
-For local development, copy `.env.example` to `.env` and fill in the values. The app loads `.env` automatically when present; values already set in the environment take precedence.
+If the bot is slow to catch up, you can go to the Actions tab, select the most recent workflow (Post to Bluesky), and
+re-run all jobs to push the bot to run again, if you so wish.
 
 ### [/ src / lib / bot.ts](src/lib/bot.ts)
 
@@ -50,85 +39,68 @@ For local development, copy `.env.example` to `.env` and fill in the values. The
 
 **Purpose:** Toggle whether the bot is in test mode.
 
-**What to change:** For the sake of organization, I included this step here, but **this should be done last** upon set up. When you are ready for the bot to begin running, change `true` to `false`.
+**What to change:** For the sake of organization, I included this step here, but **this should be done last** upon setup.
+When you are ready for the bot to begin running, change `true` to `false`.
 
-This can be toggled on and off (`false` or `true`, respectively) for any reason in the future, such as if you are editing the code and want to avoid the possibility of the bot automatically running before you've fixed the bug or changed whatever settings you're trying to update.
-
-#### 🔷 `POST_LIMIT` (optional)
-`POST_LIMIT=20`
-
-**Purpose:** Sets how many recent posts to fetch from Mastodon and check in the Bluesky feed. It defaults to `20`.
-
-**What to change:** Set `POST_LIMIT` in `.env` to a positive whole number to change the count.
+This can be toggled on and off (`false` or `true`, respectively) for any reason in the future, such as if you are
+editing the code and want to avoid the possibility of the bot automatically running before you've fixed the bug or
+changed whatever settings you're trying to update.
 
 #### 🔷 Line 149 (Change if/when Bluesky updates their video length limit from 3 minutes)
 `if (urls[0].slice(-3) == "mp4" && parseFloat(alts[0].split("@#*")[2]) < 180 && limits.canUpload == true)`
 
-**Purpose:** Gonna be so real with y'all, I (Ben Ace) am not entirely sure what the purpose of the line is, but it has something to do with the time limits on Bluesky videos.
+**Purpose:** Gonna be so real with y'all, I (Ben Ace) am not entirely sure what the purpose of the line is, but it has
+something to do with the time limits on Bluesky videos.
 
-**What to change:** When Bluesky updated their limits on video from 1 minute to 3 minutes, I noticed that the bots were still pulling the thumbnail of videos longer than a minute and adding a note in the alt text that the video exceeds Bluesky's limits. After digging around the code for a bit, I noticed that where it currently says `180` in the line above, it had said `60`. So, if Bluesky increases the time limit on videos again, update this line with the new time limit in number of seconds.
-
-#### 🔷 Line 175
-`cardBuffer = Buffer.from(await (await fetch("https://media.d3.nhle.com/image/private/t_ratio16_9-size50/v1697721957/prd/assets/flyers/assets/phi_2568x1144.png")).arrayBuffer());`
-
-**Purpose:** If the bot has trouble pulling a card from the source post and buffers for too long, this is the image it will post in place of the card.
-
-**What to change:** Currently, there is an image file with the Philadelphia Flyers logo on it in this setting. I have yet to see the bot post this photo, but just in case your bot does, change this photo to avoid embarrassment.
+**What to change:** When Bluesky updated their limits on video from 1 minute to 3 minutes, I noticed that the bots were
+still pulling the thumbnail of videos longer than a minute and adding a note in the alt text that the video exceeds
+Bluesky's limits. After digging around the code for a bit, I noticed that where it currently says `180` in the line
+above, it had said `60`. So, if Bluesky increases the time limit on videos again, update this line with the new time
+limit in number of seconds.
 
 ### [/ src / lib / getPostText.ts](src/lib/getPostText.ts)
-
-#### 🔷 Line 2
-`const mastodon = new Mastodon.API({access_token: mastodonAccessToken, api_url: 'https://mastodon.social/api/v1/'});`
-
-**Purpose:** Allows the bot to access Mastodon's API. In other words, it allows the bot to view posts on Mastodon.
-
-**What to change:** To obtain an access token, first create an account on [Mastodon](https://mastodon.social/). Then go to Settings > Development > New application.
-
-Set the Application name as whatever will help you remember this is the access token you're using for your Bluesky mirror bot. The scopes I allowed on mine are `read:accounts`, `read:statuses`, and `profile`.
-
-It will then give you your access token which will look like 40+ characters of keyboard smashing. Set it as `MASTODON_ACCESS_TOKEN` in your local `.env` file or as a repository Actions secret with that name.
-
-Never store the token directly in source code. For GitHub Actions, add the secret in repository Settings > Secrets and variables > Actions.
-
-#### 🔷 `MASTODON_HANDLE`
-`MASTODON_HANDLE=@nhlflyers@sportsbots.xyz`
-
-**Purpose:** Identifies the Mastodon account handle to replace with the Bluesky handle configured by `BSKY_HANDLE`.
-
-**What to change:** Set this to the account handle your bot mirrors. For GitHub Actions, add `MASTODON_HANDLE` as a repository variable.
 
 #### 🔷 Line 28 (Optional)
 `var nbcsphillyReg = new RegExp("@nbcsphilly", "g");`
 
 **Purpose:** Tells the bot to look for this term/hashtag/handle/other text in the posts it pulls from Mastodon.
 
-**What to change:** This is an example I left in for if you want the bot to change X/Twitter handles that it commonly tags to the person's or organization's name. For example, I have these set up for all the players' usernames for the Phillies and Flyers mirror bots. (See: [Phillies mirror bot code](https://github.com/AceOfBens/notphillies-bsky/blob/main/src/lib/getPostText.ts) [Lines 27-53 and 120-146], [Flyers mirror bot code](https://github.com/AceOfBens/notflyers-bsky/blob/main/src/lib/getPostText.ts) [Lines 25-60 and 123-156]).
+**What to change:** This is an example I left in for if you want the bot to change X/Twitter handles that it commonly
+tags to the person's or organization's name. For example, I have these set up for all the players' usernames for the
+Phillies and Flyers mirror bots. (See: [Phillies mirror bot code](https://github.com/AceOfBens/notphillies-bsky/blob/main/src/lib/getPostText.ts)
+[Lines 27-53 and 120-146], [Flyers mirror bot code](https://github.com/AceOfBens/notflyers-bsky/blob/main/src/lib/getPostText.ts)
+[Lines 25-60 and 123-156]).
 
-In this specific example, I've replaced NBC Sports Philadelphia's X/Twitter handle with "NBCSP" because the Flyers will tag the TV station (which is NBCSP for most games) and radio station where you can tune into the game at the beginning of all 3 periods. In most cases, Bluesky users will still understand who is being referenced if a Twitter handle is left in the post, but to ensure the text of the Bluesky posts remain accessible (especially since users can't click on the tagged username and go to a profile to see what is tagged), I chose to create these text substitutions.
+In this specific example, I've replaced NBC Sports Philadelphia's X/Twitter handle with "NBCSP" because the Flyers will
+tag the TV station (which is NBCSP for most games) and radio station where you can tune into the game at the beginning
+of all 3 periods. In most cases, Bluesky users will still understand who is being referenced if a Twitter handle is left
+in the post, but to ensure the text of the Bluesky posts remain accessible (especially since users can't click on the
+tagged username and go to a profile to see what is tagged), I chose to create these text substitutions.
 
 **To create your own**, the only two things you want to change from this example are:
-`nbcsphillyReg` - This names the regex and connects it to the next step. It really doesn't matter what you name it, but it helps you remember why you added it.
-`@nbcsphilly` - You'll need to change the first term in the parentheses to whatever text you want replaced. Make sure you keep quotation marks around this text.
+`nbcsphillyReg` - This names the regex and connects it to the next step. It really doesn't matter what you name it, but
+it helps you remember why you added it.
+`@nbcsphilly` - You'll need to change the first term in the parentheses to whatever text you want replaced. Make sure
+you keep quotation marks around this text.
 
 #### 🔷 Line 89 (Optional, but necessary if you did the previous step)
 `contentString = contentString.replace(nbcsphillyReg, "NBCSP");`
 
 **Purpose:** Tells the bot what to replace the text from the source post with.
 
-**What to change:** You'll need to replace both terms in the parentheses in the format of (exampleReg, "Text you wish to replace whatever's in the source post"). Everything else in this line stays the same.
+**What to change:** You'll need to replace both terms in the parentheses in the format of (exampleReg, "Text you wish
+to replace whatever's in the source post"). Everything else in this line stays the same.
 
-**Reminder!** If you haven't yet, go back to `/ src / lib / bot.ts`, Line 29 to [toggle testing mode off](https://github.com/AceOfBens/sports-mirror-bot-bsky/blob/main/README.md#-line-29) so your bot can run on Bluesky!
+**Reminder!** If you haven't yet, go back to `/ src / lib / bot.ts`, Line 29 to
+[toggle testing mode off](https://github.com/AceOfBens/sports-mirror-bot-bsky/blob/main/README.md#-line-29) so your bot
+can run on Bluesky!
 
-### I've noticed that [@notflyers.bsky.social](https://bsky.app/profile/notflyers.bsky.social/) often links to a YouTube video from the Philadelphia Flyers' channel. Why isn't my bot doing that?
+### Why doesn't my bot link Flyers' YouTube videos?
 
-Whenever @notflyers.bsky.social or @notphillies.bsky.social has a YouTube video embedded, I (Ben Ace) posted that manually. I'm not sure how to set up the bot to search a YouTube channel for a corresponding video when the video they've posted to X/Twitter exceeds Bluesky's 3-minute video limit, so, if I'm available before the bot has caught up, I will post manually with the YouTube embed. If I catch it after the bot has already posted it, I'll typically link to the corresponding YouTube video in a reply.
+Whenever @notflyers.bsky.social or @notphillies.bsky.social has a YouTube video embedded, I (Ben Ace) posted that
+manually. I'm not sure how to set up the bot to search a YouTube channel for a corresponding video when the video
+they've posted to X/Twitter exceeds Bluesky's 3-minute video limit, so, if I'm available before the bot has caught up,
+I will post manually with the YouTube embed. If I catch it after the bot has already posted it, I'll typically link to
+the corresponding YouTube video in a reply.
 
 Yes, I have too much time on my hands. It's called un(der)employment.
-
-### I've noticed that [@notphillies.bsky.social](https://bsky.app/profile/notphillies.bsky.social/)'s profile picture and banner update for Thursday and Friday home games like it does on X/Twitter. Why isn't my bot's profile picture or banner updating when the X/Twitter account it's mirroring updates them?
-
-That's another thing I do manually. Again, I know I have too much time on my hands.
-
-### I'm confused about something in the instructions. How can I contact you?
-
-Honestly, I'm probably most reachable on [Bluesky](https://bsky.app/profile/aceofbens.com). My DMs are currently open; do not make me regret that.

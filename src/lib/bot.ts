@@ -193,13 +193,7 @@ export default class Bot {
         }
       }
       if (card !== 'None' && urls[0] === 'None') {
-        let cardBuffer = await fetchBuffer(cards[3]);
-        if (cardBuffer.length > 1000000) {
-          console.log('file too big');
-          cardBuffer = await fetchBuffer(
-            'https://media.d3.nhle.com/image/private/t_ratio16_9-size50/v1697721957/prd/assets/flyers/assets/phi_2568x1144.png',
-          );
-        }
+        const cardBuffer = await fetchBuffer(cards[3]);
         const cardUpload = await this.userAgent.com.atproto.repo.uploadBlob(
           new Uint8Array(cardBuffer),
           { encoding: 'image/png' },
