@@ -45,8 +45,8 @@ export default class Bot {
 
     returns: void
   */
-  constructor(_service: AtpAgentOptions['service']) {
-    this.userAgent = new AtpAgent({ service: 'https://bsky.social' }); // Initialize the Bluesky agent on the specified service. Allows us to interface with the Bluesky API.
+  constructor(service: AtpAgentOptions['service']) {
+    this.userAgent = new AtpAgent({ service }); // Initialize the Bluesky agent on the specified service. Allows us to interface with the Bluesky API.
     this.rootCid = ''; // Initialize the root CID as the empty string. Only define this as a value when attempting to post a reply.
     this.rootUri = ''; // Initialize the root URI as the empty string. Only define this as a value when attempting to post a reply.
   }
