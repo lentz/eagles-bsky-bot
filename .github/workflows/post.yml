@@ -10,6 +10,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
+          cache: npm
       - run: npm ci
       - name: Send post
         run: npm start
@@ -19,3 +20,4 @@ jobs:
           DRY_RUN: ${{ vars.DRY_RUN }}
           MASTODON_HANDLE: ${{ vars.MASTODON_HANDLE }}
           MASTODON_ACCESS_TOKEN: ${{ secrets.MASTODON_ACCESS_TOKEN }}
+          POST_LIMIT: ${{ vars.POST_LIMIT }}
