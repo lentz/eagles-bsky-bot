@@ -1,7 +1,8 @@
 import * as Mastodon from 'tsl-mastodon-api';
+import { mastodonAccessToken } from './config.ts';
 
 const mastodon = new Mastodon.API({
-  access_token: 'paste_access_token_here',
+  access_token: mastodonAccessToken,
   api_url: 'https://mastodon.social/api/v1/',
 }); // access the Mastodon API using the access token.
 

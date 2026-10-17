@@ -10,6 +10,7 @@ if (existsSync('.env')) {
 const envSchema = z.object({
   BSKY_HANDLE: z.string().min(1),
   BSKY_PASSWORD: z.string().min(1),
+  MASTODON_ACCESS_TOKEN: z.string().min(1),
   BSKY_SERVICE: z.string().min(1).default('https://bsky.social'),
 });
 
@@ -21,3 +22,4 @@ export const bskyAccount: AtpAgentLoginOpts = {
 };
 
 export const bskyService = parsed.BSKY_SERVICE;
+export const mastodonAccessToken = parsed.MASTODON_ACCESS_TOKEN;

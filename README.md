@@ -106,7 +106,7 @@ To work around this, I change this setting to a lower number (ex. if the post I 
 ### [/ src / lib / getPostText.ts](src/lib/getPostText.ts)
 
 #### 🔷 Line 2
-`const mastodon = new Mastodon.API({access_token: 'paste_access_token_here', api_url: 'https://mastodon.social/api/v1/'});`
+`const mastodon = new Mastodon.API({access_token: mastodonAccessToken, api_url: 'https://mastodon.social/api/v1/'});`
 
 **Purpose:** Allows the bot to access Mastodon's API. In other words, it allows the bot to view posts on Mastodon.
 
@@ -114,9 +114,9 @@ To work around this, I change this setting to a lower number (ex. if the post I 
 
 Set the Application name as whatever will help you remember this is the access token you're using for your Bluesky mirror bot. The scopes I allowed on mine are `read:accounts`, `read:statuses`, and `profile`.
 
-It will then give you your access token which will look like 40+ characters of keyboard smashing, and you will copy and paste that where it says `paste_access_token_here` in Line 2. Make sure to keep the apostrophes around it.
+It will then give you your access token which will look like 40+ characters of keyboard smashing. Set it as `MASTODON_ACCESS_TOKEN` in your local `.env` file or as a repository Actions secret with that name.
 
-If you have your repository set to public, this may be another thing you keep secret, in which case, you would put `${{ secrets.ACCESS_TOKEN }}` in place of the access token and follow the same steps you did to [set up the login info](https://github.com/AceOfBens/sports-mirror-bot-bsky/blob/main/README.md#-lines-21-22).
+Never store the token directly in source code. For GitHub Actions, add the secret in repository Settings > Secrets and variables > Actions.
 
 #### 🔷 Line 25
 `var nhlflyersReg = new RegExp("@nhlflyers@sportsbots.xyz", "g");`
