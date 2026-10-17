@@ -90,17 +90,12 @@ It will then give you your access token which will look like 40+ characters of k
 
 Never store the token directly in source code. For GitHub Actions, add the secret in repository Settings > Secrets and variables > Actions.
 
-#### 🔷 Line 25
-`var nhlflyersReg = new RegExp("@nhlflyers@sportsbots.xyz", "g");`
+#### 🔷 `MASTODON_HANDLE`
+`MASTODON_HANDLE=@nhlflyers@sportsbots.xyz`
 
-**Purpose:** Replaces the handle of the Mastodon account the bot is mirroring with the handle of the Bluesky bot.
+**Purpose:** Identifies the Mastodon account handle to replace with the Bluesky handle configured by `BSKY_HANDLE`.
 
-**What to change:** Rename the regex `nhlflyerReg` to anything you want in the format of `nameReg`, then replace `@nhlflyers@sportsbots.xyz` with the Mastodon handle your bot is mirroring. It is likely the same as a the X/Twitter handle with "@sportsbots.xyz" at the end.
-
-#### 🔷 Line 87
-`contentString = contentString.replace(nhlflyersReg, config.bskyHandle);`
-
-**Purpose:** Replaces the configured Mastodon handle with the Bluesky handle from `BSKY_HANDLE`.
+**What to change:** Set this to the account handle your bot mirrors. For GitHub Actions, add `MASTODON_HANDLE` as a repository variable.
 
 #### 🔷 Line 28 (Optional)
 `var nbcsphillyReg = new RegExp("@nbcsphilly", "g");`
@@ -123,33 +118,6 @@ In this specific example, I've replaced NBC Sports Philadelphia's X/Twitter hand
 **What to change:** You'll need to replace both terms in the parentheses in the format of (exampleReg, "Text you wish to replace whatever's in the source post"). Everything else in this line stays the same.
 
 **Reminder!** If you haven't yet, go back to `/ src / lib / bot.ts`, Line 29 to [toggle testing mode off](https://github.com/AceOfBens/sports-mirror-bot-bsky/blob/main/README.md#-line-29) so your bot can run on Bluesky!
-
-### No Change Needed
-
-The following files in this bot **do not** need to be edited to run properly, and unless you are well versed in Typescript, it is highly recommended that you do not change anything in them.
-
-* / src / index.ts
-* / src / lib / config.ts
-* / .env.example
-* / .gitignore
-* / .nvmrc
-* / LICENSE
-  * Note: The license details from Phil Nash's Bluesky bot repository is included in this template because his work is the basis for this repository and the license he specified applies.
-* / README.md
-  * Note: As this is a text file meant to give you the necessary information to set up your Bluesky mirror bot, technically, you can change anything in here and the bot will still run properly. That said, if you make your repository public or make it private and intend to link to it anywhere, **do not** remove the credits section at the top.
-* / biome.json
-* / package-lock.json
-* / package.json
-* / tsconfig.json
-
-
-## FAQ
-
-### Does this cost anything to make?
-
-Generally, no. The purpose of pulling from a Mastodon mirror bot instead of directly from the X/Twitter account is because accessing X/Twitter's API is a hassle for several reasons. So, that part of it costs nothing.
-
-However, depending on how many bots you have running through your Github account and how often you schedule them to run, you may hit [Github Actions' monthly limit](https://docs.github.com/en/billing/managing-billing-for-your-products/managing-billing-for-github-actions/about-billing-for-github-actions). Most workflows for this are billed as 1 minute, meaning each time one of these bots run, it counts toward 1 minute of the 2,000 minutes per month you're allowed on a free account. Currently, I'm paying the $4/month for Github Pro to run @notflyers.bsky.social and @notphillies.bsky.social because I can spare a few bucks a month and I feel it's a worthwhile project. If you're looking to keep a free account, this may factor into how many bots you set up and [how often you schedule the bot to run](https://github.com/AceOfBens/sports-mirror-bot-bsky/blob/main/README.md#-github--workflow--postyml).
 
 ### I've noticed that [@notflyers.bsky.social](https://bsky.app/profile/notflyers.bsky.social/) often links to a YouTube video from the Philadelphia Flyers' channel. Why isn't my bot doing that?
 

@@ -23,8 +23,11 @@ export default async function getPostText() {
   const andReg = /&amp;/g; // A regex to deal with &amp;. This should be replaced with &.
   const logoReg = /&nbsp;/g; // A regex to deal with &nbsp;. Should be deleted.
   const twitterReg = /@twitter.com/g; // A regex to deal with @twitter.com. Should be deleted.
+  const mastodonHandleReg = new RegExp(
+    RegExp.escape(config.mastodonHandle),
+    'g',
+  );
   const sportsBotsReg = /@sportsbots.xyz/g;
-  const nhlflyersReg = /@nhlflyers@sportsbots.xyz/g; // A regex to deal with Flyers's @. Should be replaced with the bot's @.
   const tagReg = /<(:?[^>]+)>/g; // A general regex for HTML. Used to get the plaintext value of the mastodon post without tag notation.
   const invalidLinkReg = /\S*(\.com|\.ca|\.org|\.net)\S*(…|\.\.\.)/g;
   const nbcsphillyReg = /@nbcsphilly/g; // Regex example for a substitution within the post text. Can be helpful for if you want to replace an X/Twitter handle with the user's name
@@ -84,11 +87,11 @@ export default async function getPostText() {
     contentString = contentString.replace(pReg, '\n\n');
     contentString = contentString.replace(brReg, '\n');
     contentString = contentString.replace(quoteReg, `"`);
-    contentString = contentString.replace(andReg, '&'); //Use the ", &, <p>, and <br> regexes to apply appropriate formatting. Then use the general regex to remove the HTML formatting from the mastodon post.
+    contentString = contentString.replace(andReg, '&'); //Use the ", &, <p>, and <br> regexes to apply appropriate formatting. Then use the general regex to remove the HTML formatting from the Mastodon post.
     contentString = contentString.replace(logoReg, '');
     contentString = contentString.replace(twitterReg, '');
+    contentString = contentString.replace(mastodonHandleReg, config.bskyHandle);
     contentString = contentString.replace(sportsBotsReg, '');
-    contentString = contentString.replace(nhlflyersReg, config.bskyHandle);
     contentString = contentString.replace(tagReg, '');
     contentString = contentString.replace(nbcsphillyReg, 'NBCSP');
 
