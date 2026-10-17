@@ -32,8 +32,8 @@ export default class Bot {
 
   static defaultOptions: BotOptions = {
     service: config.bskyService, // Variable detailing the service we want to initialize the Bluesky agent on.
-    dryRun: true, // Change this to true if you want the bot to not actually post to Bluesky for testing purposes.
-  } as const; // The options can't be changed mid-execution. Change these manually in source code if you want them to be different.
+    dryRun: config.dryRun,
+  } as const; // Per-run bot options can override these config-based defaults.
 
   /*
     constructor(service):

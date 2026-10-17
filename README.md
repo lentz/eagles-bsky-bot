@@ -12,39 +12,22 @@ variables already set in the shell take precedence. Do not commit `.env`.
 | --- | --- | --- | --- |
 | `BSKY_HANDLE` | Yes | — | Bluesky account handle used to log in and identify the account's feed. |
 | `BSKY_PASSWORD` | Yes | — | Bluesky account password or app password. |
+| `DRY_RUN` | No | `false` | When `true`, the bot does not publish posts. |
 | `MASTODON_ACCESS_TOKEN` | Yes | — | Mastodon API token with read access to statuses. Keep this secret. |
 | `MASTODON_HANDLE` | Yes | — | Mastodon account handle to replace with the Bluesky handle in mirrored post text, e.g. `@TEAM@sportsbots.xyz`. |
 | `BSKY_SERVICE` | No | `https://bsky.social` | Bluesky service endpoint. |
 | `POST_LIMIT` | No | `20` | Positive whole number of recent posts to fetch from Mastodon and check in the Bluesky feed. |
 
 For GitHub Actions, add `BSKY_HANDLE`, `BSKY_PASSWORD`, and `MASTODON_ACCESS_TOKEN` under
-**Settings > Secrets and variables > Actions > Secrets**. Add `MASTODON_HANDLE` under **Variables**. The workflow
-currently uses the defaults for `BSKY_SERVICE` and `POST_LIMIT`; to override either in Actions, map it into the
-workflow's `env` from a repository variable.
+**Settings > Secrets and variables > Actions > Secrets**. Add `MASTODON_HANDLE` under **Variables**.
 
 ### Workflow schedule
 
 The workflow's run frequency is configured by the `cron` expression in `.github/workflows/post.yml`. GitHub Actions can
 delay scheduled runs, so execution may not happen exactly on the requested minute.
 
-### [/.github/workflows/post.yml](.github/workflows/post.yml)
-
 If the bot is slow to catch up, you can go to the Actions tab, select the most recent workflow (Post to Bluesky), and
 re-run all jobs to push the bot to run again, if you so wish.
-
-### [/ src / lib / bot.ts](src/lib/bot.ts)
-
-#### 🔷 Line 29
-`dryRun: true,`
-
-**Purpose:** Toggle whether the bot is in test mode.
-
-**What to change:** For the sake of organization, I included this step here, but **this should be done last** upon setup.
-When you are ready for the bot to begin running, change `true` to `false`.
-
-This can be toggled on and off (`false` or `true`, respectively) for any reason in the future, such as if you are
-editing the code and want to avoid the possibility of the bot automatically running before you've fixed the bug or
-changed whatever settings you're trying to update.
 
 ### [/ src / lib / getPostText.ts](src/lib/getPostText.ts)
 
@@ -78,7 +61,3 @@ you keep quotation marks around this text.
 
 **What to change:** You'll need to replace both terms in the parentheses in the format of (exampleReg, "Text you wish
 to replace whatever's in the source post"). Everything else in this line stays the same.
-
-**Reminder!** If you haven't yet, go back to `/ src / lib / bot.ts`, Line 29 to
-[toggle testing mode off](https://github.com/AceOfBens/sports-mirror-bot-bsky/blob/main/README.md#-line-29) so your bot
-can run on Bluesky!
