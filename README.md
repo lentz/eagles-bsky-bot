@@ -18,8 +18,8 @@ variables already set in the shell take precedence. Do not commit `.env`.
 | `BSKY_SERVICE` | No | `https://bsky.social` | Bluesky service endpoint. |
 | `POST_LIMIT` | No | `20` | Positive whole number of recent posts to fetch from Mastodon and check in the Bluesky feed. |
 
-For GitHub Actions, add `BSKY_HANDLE`, `BSKY_PASSWORD`, and `MASTODON_ACCESS_TOKEN` under
-**Settings > Secrets and variables > Actions > Secrets**. Add `MASTODON_HANDLE` under **Variables**.
+For GitHub Actions, add `BSKY_PASSWORD` and `MASTODON_ACCESS_TOKEN` under **Settings > Secrets and variables > Actions > Secrets**.
+Add `BSKY_HANDLE` and `MASTODON_HANDLE` under **Variables**.
 
 ## Workflow schedule
 
