@@ -46,18 +46,6 @@ This can be toggled on and off (`false` or `true`, respectively) for any reason 
 editing the code and want to avoid the possibility of the bot automatically running before you've fixed the bug or
 changed whatever settings you're trying to update.
 
-#### 🔷 Line 149 (Change if/when Bluesky updates their video length limit from 3 minutes)
-`if (urls[0].slice(-3) == "mp4" && parseFloat(alts[0].split("@#*")[2]) < 180 && limits.canUpload == true)`
-
-**Purpose:** Gonna be so real with y'all, I (Ben Ace) am not entirely sure what the purpose of the line is, but it has
-something to do with the time limits on Bluesky videos.
-
-**What to change:** When Bluesky updated their limits on video from 1 minute to 3 minutes, I noticed that the bots were
-still pulling the thumbnail of videos longer than a minute and adding a note in the alt text that the video exceeds
-Bluesky's limits. After digging around the code for a bit, I noticed that where it currently says `180` in the line
-above, it had said `60`. So, if Bluesky increases the time limit on videos again, update this line with the new time
-limit in number of seconds.
-
 ### [/ src / lib / getPostText.ts](src/lib/getPostText.ts)
 
 #### 🔷 Line 28 (Optional)
@@ -94,13 +82,3 @@ to replace whatever's in the source post"). Everything else in this line stays t
 **Reminder!** If you haven't yet, go back to `/ src / lib / bot.ts`, Line 29 to
 [toggle testing mode off](https://github.com/AceOfBens/sports-mirror-bot-bsky/blob/main/README.md#-line-29) so your bot
 can run on Bluesky!
-
-### Why doesn't my bot link Flyers' YouTube videos?
-
-Whenever @notflyers.bsky.social or @notphillies.bsky.social has a YouTube video embedded, I (Ben Ace) posted that
-manually. I'm not sure how to set up the bot to search a YouTube channel for a corresponding video when the video
-they've posted to X/Twitter exceeds Bluesky's 3-minute video limit, so, if I'm available before the bot has caught up,
-I will post manually with the YouTube embed. If I catch it after the bot has already posted it, I'll typically link to
-the corresponding YouTube video in a reply.
-
-Yes, I have too much time on my hands. It's called un(der)employment.

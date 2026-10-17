@@ -176,7 +176,7 @@ export default class Bot {
 
     if (
       urls[0].slice(-3) === 'mp4' &&
-      parseFloat(alts[0].split('@#*')[2]) < 60 &&
+      parseFloat(alts[0].split('@#*')[2]) <= 600 &&
       limits.canUpload === true
     ) {
       await this.postVideo(false, urls[0], alts[0], text);
