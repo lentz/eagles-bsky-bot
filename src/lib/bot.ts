@@ -246,8 +246,6 @@ export default class Bot {
         limit: config.postLimit,
       }); // Get a defined number + 2 of most recent posts from the logged in user's feed.
       const bskyFeed = bskyFeedAwait.data.feed; // Filter down the await values so we are only looking at the feeds.
-      const bskyFeed0 = bskyFeed[0]; // Select post 0, the most recent post made by this user.
-      const bskyPost0 = bskyFeed0.post; // Filter down the values of the post so we can look at the params.
       let parentId = { uri: '', cid: '' }; // Initialize the parent ID as 2 empty strings. This should never matter, because it shouldn't be possible to use parentId without assigning it.
       if (isReply === false) {
         // Check if this is not a reply, meaning it is a root post.
@@ -255,6 +253,12 @@ export default class Bot {
         this.rootCid = ''; // Reset the root CID to the empty string, since we are no longer replying under a previous post.
       } // If this is a reply
       else {
+        const bskyPost0 = bskyFeed[0]?.post;
+        if (!bskyPost0) {
+          throw new Error(
+            'Cannot create a reply because the Bluesky author feed has no posts.',
+          );
+        }
         const bskyUri = bskyPost0.uri; // Collect the URI from the most recent post by the logged in user.
         const bskyCid = bskyPost0.cid; // Collect the CID from the most recent post by the logged in user.
         parentId = { uri: bskyUri, cid: bskyCid }; // Create an ID object using the URI and CID from the most recent post.
@@ -376,27 +380,25 @@ export default class Bot {
     const mastodonArr = urlsStringsAltsCardsArr[1].split('@#%');
     const mastAltArr = urlsStringsAltsCardsArr[2].split('@#%');
     const mastCardArr = urlsStringsAltsCardsArr[3].split('@#%');
+    const mastIdArr = urlsStringsAltsCardsArr[4].split('@#%');
 
     if (!dryRun) {
       // Make sure that we don't wanna run the bot without posting. Tbh, I think I might have broken this feature through my changes to the source code. May need to reimplement dry run as a working option when I generalize the code for other purposes.
-      let postCount = 0; // Variable to keep track of how many successful posts occurred.
       for (
         let i = mastodonArr.length - 1;
         i >= 0;
         i-- // Iterate over the recent Mastodon posts in reverse sequential order. -1 may not be necessary, do some more testing.
       ) {
+        console.log(`Mirroring Mastodon post ID ${mastIdArr[i]}`);
         if (mastodonArr[i].length <= 300) {
           // Simple case, where a post is 300 characters or less, within the length bounds of a Bluesky post.
-          const postVal = await bot.post(
+          await bot.post(
             false,
             mastUrlArr[i],
             mastAltArr[i],
             mastCardArr[i],
             mastodonArr[i],
           ); // Run bot.post on this text value, posting to Bluesky if the text is new. Post this as a root value. // Run bot.post on this text value, posting to Bluesky if the text is new. Post this as a root value.
-          if (Number(postVal) !== 37) {
-            postCount++;
-          }
         } // Complicated case where a post is longer than 300 characters, longer than a valid Bluesky post.
         else {
           const wordArr = mastodonArr[i].split(' '); // Turn the string into an array of words parsed by spaces.
@@ -426,16 +428,13 @@ export default class Bot {
             j < threadArr.length;
             j++ // Iterate over all of the chunk strings contained in the thread array.
           ) {
-            const postVal = await bot.post(
+            await bot.post(
               isReply,
               mastUrlArr[i],
               mastAltArr[i],
               mastCardArr[i],
               `${threadArr[j]} [${j + 1}/${threadArr.length}]`,
             ); // Post string j in the thread array. Use the boolean variable to determine whether this is a root post or a reply, add a post counter on the end to make the thread easier to read.
-            if (Number(postVal) !== 37) {
-              postCount++;
-            }
             if (isReply === false) {
               // If this post was posted as a root, meaning that this is the first iteration:
               isReply = true; // Set the boolean value to post as replies for the remaining iterations.
@@ -444,15 +443,6 @@ export default class Bot {
             }
           }
         }
-      }
-      if (postCount === mastodonArr.length) {
-        await bot.post(
-          false,
-          'None!^&None!^&None!^&None',
-          'None!^&None!^&None!^&None',
-          'None',
-          'ERROR: Repost Detection Glitch.',
-        );
       }
     }
     return; // Return void, we're done.

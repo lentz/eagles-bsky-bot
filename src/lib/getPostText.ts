@@ -9,11 +9,11 @@ const mastodon = new Mastodon.API({
 /*
 	getPostText():
 
-	This function performs a Mastodon API GET request to get the n most recent tweets created by the Flyers. Using this, the function formats these strings down into the desired plaintext of a Bluesky post, stripping out all of the unnecessary HTML tag notation and handling formatting such that the text is compatible with Bluesky.
+	This function fetches the configured Mastodon account's recent statuses and formats them as Bluesky posts.
 
 	args: None
 
-	returns: A string representing the desired text of the Bluesky posts we want to create. Text for different posts are delimited by \/ characters. 
+	returns: A string representing the desired text of the Bluesky posts we want to create. Text for different posts are delimited by \/ characters.
 */
 export default async function getPostText() {
   // Regex list to address formatting discrepancies between Mastodon posts and Bluesky posts
@@ -32,15 +32,38 @@ export default async function getPostText() {
   const invalidLinkReg = /\S*(\.com|\.ca|\.org|\.net)\S*(…|\.\.\.)/g;
   const nbcsphillyReg = /@nbcsphilly/g; // Regex example for a substitution within the post text. Can be helpful for if you want to replace an X/Twitter handle with the user's name
 
-  const awaitTweet = await mastodon.getStatuses('109705347039296818', {
+  const accountLookup = await mastodon.get('accounts/lookup', {
+    acct: config.mastodonHandle,
+  });
+  if (accountLookup.error || accountLookup.status !== 200) {
+    throw new Error(
+      `Failed to look up Mastodon account "${config.mastodonHandle}"`,
+      { cause: accountLookup.error },
+    );
+  }
+
+  const account = accountLookup.json;
+  if (
+    typeof account !== 'object' ||
+    account === null ||
+    !('id' in account) ||
+    typeof account.id !== 'string'
+  ) {
+    throw new Error(
+      `Mastodon lookup returned no account ID for "${config.mastodonHandle}"`,
+    );
+  }
+
+  const awaitTweet = await mastodon.getStatuses(account.id, {
     limit: config.postLimit,
-  }); //Use the Mastodon API to get a specified number of recent posts from the Mastodon API.
+  });
   const string = JSON.stringify(awaitTweet); // Convert the post into a JSON string.
   const objJSON = JSON.parse(string).json; // Convert the JSON string back to a JSON object. Kinda silly, but it doesn't work otherwise.
   const stringArr = []; // Initialize an empty array that we will store the regexed plaintexts in.
   const urlArr = [];
   const altTextArr = [];
   const cardArr = [];
+  const idArr = [];
   for (
     let i = 0;
     i < config.postLimit;
@@ -48,6 +71,7 @@ export default async function getPostText() {
   ) {
     const postUrlArr = [];
     const postAltTextArr = [];
+    idArr.push(objJSON[i].id);
     for (let j = 0; j < 4; j++) {
       if (objJSON[i].media_attachments[j] !== undefined) {
         if (
@@ -128,7 +152,8 @@ export default async function getPostText() {
   const strings = stringArr.join('@#%'); // Turn the string array into a single string by joining them with a \/ delimiter. This will be undone when used by bot functions.
   const alts = altTextArr.join('@#%');
   const cards = cardArr.join('@#%');
-  const urlsStringsAltsCardsArr = [urls, strings, alts, cards];
+  const ids = idArr.join('@#%');
+  const urlsStringsAltsCardsArr = [urls, strings, alts, cards, ids];
   const urlsStringsAltsCards = urlsStringsAltsCardsArr.join('~~~');
   return urlsStringsAltsCards; // Return this singular concatenated string.
 }
