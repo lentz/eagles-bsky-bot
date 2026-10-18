@@ -3,37 +3,39 @@ import type {
   AppBskyEmbedExternal,
   AppBskyEmbedImages,
   AppBskyFeedPost,
-  AtpAgentLoginOpts,
 } from '@atproto/api';
 import { AtpAgent, RichText } from '@atproto/api';
 
 import { config } from './config.ts';
 import getPostText from './getPostText.ts';
 
-async function fetchBuffer(url: string): Promise<Buffer> {
-  const response = await fetch(url);
-  if (!response.ok) {
+async function fetchBuffer(mediaUrl: string): Promise<Buffer> {
+  const mediaResponse = await fetch(mediaUrl);
+  if (!mediaResponse.ok) {
     throw new Error(
-      `Failed to fetch ${url}: ${response.status} ${response.statusText}`,
+      `Failed to fetch ${mediaUrl}: ${mediaResponse.status} ${mediaResponse.statusText}`,
     );
   }
-  return Buffer.from(await response.arrayBuffer());
+  return Buffer.from(await mediaResponse.arrayBuffer());
 }
 
-function getFeedPostText(record: unknown): string | undefined {
+function getFeedPostText(postRecord: unknown): string | undefined {
   if (
-    typeof record === 'object' &&
-    record !== null &&
-    'text' in record &&
-    typeof record.text === 'string'
+    typeof postRecord === 'object' &&
+    postRecord !== null &&
+    'text' in postRecord &&
+    typeof postRecord.text === 'string'
   ) {
-    return record.text;
+    return postRecord.text;
   }
   return undefined;
 }
 
-function isDuplicateOrEmpty(text: string, feedTexts: readonly string[]) {
-  return text.length === 0 || feedTexts.includes(text);
+function isDuplicateOrEmpty(
+  postText: string,
+  recentPostTexts: readonly string[],
+) {
+  return postText.length === 0 || recentPostTexts.includes(postText);
 }
 
 export default class Bot {
@@ -49,11 +51,12 @@ export default class Bot {
   /**
    * Authenticates the Bluesky agent.
    *
-   * @param loginOpts - Credentials and options used to log in.
+   * @param bskyHandle - Bluesky account handle.
+   * @param password - Bluesky account password.
    */
-  async login(handle: string, password: string) {
+  async login(bskyHandle: string, password: string) {
     await this.blueskyAgent.login({
-      identifier: handle,
+      identifier: bskyHandle,
       password,
     });
   }
@@ -64,70 +67,74 @@ export default class Bot {
    * @returns Text from recent feed records that contain a string value.
    */
   async getRecentPostTexts() {
-    const response = await this.blueskyAgent.app.bsky.feed.getAuthorFeed({
+    const feedResponse = await this.blueskyAgent.app.bsky.feed.getAuthorFeed({
       actor: config.bskyHandle,
       limit: config.postLimit,
     });
-    return response.data.feed
+    return feedResponse.data.feed
       .map(({ post }) => getFeedPostText(post.record))
-      .filter((text): text is string => text !== undefined);
+      .filter((postText): postText is string => postText !== undefined);
   }
 
   /**
    * Publishes a video post unless its text is empty or already in the recent feed.
    *
-   * @param url - URL of the video to upload.
-   * @param alt - Encoded video dimensions and thumbnail metadata.
-   * @param text - Text or feed record to publish.
+   * @param videoUrl - URL of the video to upload.
+   * @param videoMetadata - Encoded video dimensions and thumbnail metadata.
+   * @param postText - Text or feed record to publish.
    * @returns A promise that resolves when the video is published or skipped.
    */
   async postVideo(
-    url: string,
-    alt: string,
-    text:
+    videoUrl: string,
+    videoMetadata: string,
+    postText:
       | string
       | (Partial<AppBskyFeedPost.Record> &
           Omit<AppBskyFeedPost.Record, 'createdAt'>),
   ): Promise<void> {
-    const bskyFeedAwait = await this.blueskyAgent.app.bsky.feed.getAuthorFeed({
+    const feedResponse = await this.blueskyAgent.app.bsky.feed.getAuthorFeed({
       actor: config.bskyHandle,
       limit: config.postLimit,
     });
-    const bskyFeed = bskyFeedAwait.data.feed;
-    const feedTexts = bskyFeed
+    const recentFeed = feedResponse.data.feed;
+    const recentPostTexts = recentFeed
       .map(({ post }) => getFeedPostText(post.record))
       .filter((feedText): feedText is string => feedText !== undefined);
 
-    if (typeof text === 'string' && isDuplicateOrEmpty(text, feedTexts)) {
+    if (
+      typeof postText === 'string' &&
+      isDuplicateOrEmpty(postText, recentPostTexts)
+    ) {
       console.log(`Post has already been mirrored.`);
       return;
-    } else if (typeof text !== 'string') {
+    } else if (typeof postText !== 'string') {
       return;
     }
 
-    const metadataArr = alt.split('@#*');
+    const videoMetadataFields = videoMetadata.split('@#*');
 
-    const videoBuffer = await fetchBuffer(url);
+    const videoBuffer = await fetchBuffer(videoUrl);
 
-    const { data } = await this.blueskyAgent.com.atproto.repo.uploadBlob(
-      new Uint8Array(videoBuffer),
-    );
+    const videoUploadResponse =
+      await this.blueskyAgent.com.atproto.repo.uploadBlob(
+        new Uint8Array(videoBuffer),
+      );
 
-    if (!data?.blob) {
+    if (!videoUploadResponse.data?.blob) {
       throw new Error('Failed to upload video: no blob returned.');
     }
 
     console.log('Video uploaded, posting...');
 
     await this.blueskyAgent.post({
-      text: text,
+      text: postText,
       langs: ['en'],
       embed: {
         $type: 'app.bsky.embed.video',
-        video: data.blob,
+        video: videoUploadResponse.data.blob,
         aspectRatio: {
-          width: parseInt(metadataArr[0], 10),
-          height: parseInt(metadataArr[1], 10),
+          width: parseInt(videoMetadataFields[0], 10),
+          height: parseInt(videoMetadataFields[1], 10),
         },
       },
     });
@@ -137,27 +144,27 @@ export default class Bot {
    * Publishes a post or reply with any available media or link-card embeds.
    *
    * @param isReply - Whether the post should reply to the preceding thread post.
-   * @param url - Encoded media URLs associated with the source post.
-   * @param alt - Encoded media descriptions and video metadata.
-   * @param card - Encoded link-card metadata, or `None` when no card exists.
-   * @param text - Text or feed record to publish.
+   * @param encodedMediaUrls - Encoded media URLs associated with the source post.
+   * @param encodedMediaAltTexts - Encoded media descriptions and video metadata.
+   * @param encodedLinkCard - Encoded link-card metadata, or `None` when absent.
+   * @param postText - Text or feed record to publish.
    * @returns The Bluesky post response, or `37` when the post is skipped.
    */
   async post(
     isReply: boolean,
-    url: string,
-    alt: string,
-    card: string,
-    text:
+    encodedMediaUrls: string,
+    encodedMediaAltTexts: string,
+    encodedLinkCard: string,
+    postText:
       | string
       | (Partial<AppBskyFeedPost.Record> &
           Omit<AppBskyFeedPost.Record, 'createdAt'>),
   ) {
-    let img: $Typed<AppBskyEmbedImages.Main> | undefined;
-    const urls = url.split('!^&');
-    const alts = alt.split('!^&');
-    const cards = card.split('!^&');
-    let cardEmbed: $Typed<AppBskyEmbedExternal.Main> | undefined;
+    let imageEmbed: $Typed<AppBskyEmbedImages.Main> | undefined;
+    const mediaUrls = encodedMediaUrls.split('!^&');
+    const mediaAltTexts = encodedMediaAltTexts.split('!^&');
+    const linkCardFields = encodedLinkCard.split('!^&');
+    let linkCardEmbed: $Typed<AppBskyEmbedExternal.Main> | undefined;
 
     const { data: serviceAuth } =
       await this.blueskyAgent.com.atproto.server.getServiceAuth({
@@ -166,176 +173,199 @@ export default class Bot {
         exp: Date.now() / 1000 + 60 * 30,
       });
     const token = serviceAuth.token;
-    const limitsUrl =
+    const videoUploadLimitsUrl =
       'https://video.bsky.app/xrpc/app.bsky.video.getUploadLimits';
-    const limitsResponse = await fetch(limitsUrl, {
+    const videoUploadLimitsResponse = await fetch(videoUploadLimitsUrl, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!limitsResponse.ok) {
+    if (!videoUploadLimitsResponse.ok) {
       throw new Error(
-        `Failed to fetch video upload limits: ${limitsResponse.status} ${limitsResponse.statusText}`,
+        `Failed to fetch video upload limits: ${videoUploadLimitsResponse.status} ${videoUploadLimitsResponse.statusText}`,
       );
     }
-    const limits = await limitsResponse.json();
+    const videoUploadLimits = await videoUploadLimitsResponse.json();
 
     if (
-      urls[0].slice(-3) === 'mp4' &&
-      parseFloat(alts[0].split('@#*')[2]) <= 600 &&
-      limits.canUpload === true
+      mediaUrls[0].slice(-3) === 'mp4' &&
+      parseFloat(mediaAltTexts[0].split('@#*')[2]) <= 600 &&
+      videoUploadLimits.canUpload === true
     ) {
-      await this.postVideo(urls[0], alts[0], text);
+      await this.postVideo(mediaUrls[0], mediaAltTexts[0], postText);
       return 37;
     } else {
-      if (urls[0].slice(-3) === 'mp4') {
-        urls[0] = alts[0].split('@#*')[3];
-        if (limits.canUpload === false) {
-          alts[0] =
+      if (mediaUrls[0].slice(-3) === 'mp4') {
+        mediaUrls[0] = mediaAltTexts[0].split('@#*')[3];
+        if (videoUploadLimits.canUpload === false) {
+          mediaAltTexts[0] =
             'The bot has posted its maximum number of videos for the day. This is the thumbnail of the video instead.';
         } else {
-          alts[0] =
+          mediaAltTexts[0] =
             'The video is too long to be posted on Bluesky. This is the thumbnail of the video instead.';
         }
       }
-      if (card !== 'None' && urls[0] === 'None') {
-        const cardBuffer = await fetchBuffer(cards[3]);
-        const cardUpload = await this.blueskyAgent.com.atproto.repo.uploadBlob(
-          new Uint8Array(cardBuffer),
-          { encoding: 'image/png' },
-        );
-        const cardObj = {
-          uri: cards[0],
-          title: cards[1],
-          description: cards[2],
-          thumb: cardUpload.data.blob,
+      if (encodedLinkCard !== 'None' && mediaUrls[0] === 'None') {
+        const linkCardImageBuffer = await fetchBuffer(linkCardFields[3]);
+        const linkCardImageUpload =
+          await this.blueskyAgent.com.atproto.repo.uploadBlob(
+            new Uint8Array(linkCardImageBuffer),
+            { encoding: 'image/png' },
+          );
+        const externalLinkCard = {
+          uri: linkCardFields[0],
+          title: linkCardFields[1],
+          description: linkCardFields[2],
+          thumb: linkCardImageUpload.data.blob,
         };
-        cardEmbed = { $type: 'app.bsky.embed.external', external: cardObj };
+        linkCardEmbed = {
+          $type: 'app.bsky.embed.external',
+          external: externalLinkCard,
+        };
       }
 
-      for (let i = 0; i < 4; i++) {
-        if (urls[i] !== 'None') {
-          const buffer = await fetchBuffer(urls[i]);
-          if (buffer.length <= 1000000) {
-            const upload = await this.blueskyAgent.com.atproto.repo.uploadBlob(
-              new Uint8Array(buffer),
-              { encoding: 'image/png' },
-            );
-            if (img === undefined) {
-              if (alts[i] !== 'None') {
-                img = {
-                  images: [{ image: upload.data.blob, alt: alts[i] }],
+      for (let attachmentIndex = 0; attachmentIndex < 4; attachmentIndex++) {
+        if (mediaUrls[attachmentIndex] !== 'None') {
+          const imageBuffer = await fetchBuffer(mediaUrls[attachmentIndex]);
+          if (imageBuffer.length <= 1000000) {
+            const imageUploadResponse =
+              await this.blueskyAgent.com.atproto.repo.uploadBlob(
+                new Uint8Array(imageBuffer),
+                { encoding: 'image/png' },
+              );
+            if (imageEmbed === undefined) {
+              if (mediaAltTexts[attachmentIndex] !== 'None') {
+                imageEmbed = {
+                  images: [
+                    {
+                      image: imageUploadResponse.data.blob,
+                      alt: mediaAltTexts[attachmentIndex],
+                    },
+                  ],
                   $type: 'app.bsky.embed.images',
                 };
               } else {
-                img = {
-                  images: [{ image: upload.data.blob, alt: '' }],
+                imageEmbed = {
+                  images: [{ image: imageUploadResponse.data.blob, alt: '' }],
                   $type: 'app.bsky.embed.images',
                 };
               }
             } else {
-              if (alts[i] !== 'None') {
-                img.images.push({
-                  image: upload.data.blob,
-                  alt: alts[i],
+              if (mediaAltTexts[attachmentIndex] !== 'None') {
+                imageEmbed.images.push({
+                  image: imageUploadResponse.data.blob,
+                  alt: mediaAltTexts[attachmentIndex],
                 });
               } else {
-                img.images.push({ image: upload.data.blob, alt: '' });
+                imageEmbed.images.push({
+                  image: imageUploadResponse.data.blob,
+                  alt: '',
+                });
               }
             }
           }
         }
       }
 
-      const bskyFeedAwait = await this.blueskyAgent.app.bsky.feed.getAuthorFeed(
-        {
-          actor: config.bskyHandle,
-          limit: config.postLimit,
-        },
-      );
-      const bskyFeed = bskyFeedAwait.data.feed;
-      let parentId = { uri: '', cid: '' };
+      const feedResponse = await this.blueskyAgent.app.bsky.feed.getAuthorFeed({
+        actor: config.bskyHandle,
+        limit: config.postLimit,
+      });
+      const recentFeed = feedResponse.data.feed;
+      let parentPostReference = { uri: '', cid: '' };
       if (isReply === false) {
         this.rootUri = '';
         this.rootCid = '';
       } else {
-        const bskyPost0 = bskyFeed[0]?.post;
-        if (!bskyPost0) {
+        const latestFeedPost = recentFeed[0]?.post;
+        if (!latestFeedPost) {
           throw new Error(
             'Cannot create a reply because the Bluesky author feed has no posts.',
           );
         }
-        const bskyUri = bskyPost0.uri;
-        const bskyCid = bskyPost0.cid;
-        parentId = { uri: bskyUri, cid: bskyCid };
+        const latestPostUri = latestFeedPost.uri;
+        const latestPostCid = latestFeedPost.cid;
+        parentPostReference = { uri: latestPostUri, cid: latestPostCid };
         if (this.rootUri === '') {
-          this.rootUri = bskyUri;
-          this.rootCid = bskyCid;
+          this.rootUri = latestPostUri;
+          this.rootCid = latestPostCid;
         }
       }
-      const feedTexts = bskyFeed
+      const recentPostTexts = recentFeed
         .map(({ post }) => getFeedPostText(post.record))
         .filter((feedText): feedText is string => feedText !== undefined);
-      if (typeof text === 'string' && isDuplicateOrEmpty(text, feedTexts)) {
+      if (
+        typeof postText === 'string' &&
+        isDuplicateOrEmpty(postText, recentPostTexts)
+      ) {
         console.log('Post has already been mirrored.');
         return '37';
       }
-      if (typeof text === 'string') {
-        const richText = new RichText({ text });
+      if (typeof postText === 'string') {
+        const richText = new RichText({ text: postText });
         await richText.detectFacets(this.blueskyAgent);
-        let record: Partial<AppBskyFeedPost.Record> &
+        let postRecord: Partial<AppBskyFeedPost.Record> &
           Omit<AppBskyFeedPost.Record, 'createdAt'>;
         if (isReply === true) {
-          const rootId = { uri: this.rootUri, cid: this.rootCid };
-          if (urls[0] !== 'None') {
-            record = {
+          const rootPostReference = { uri: this.rootUri, cid: this.rootCid };
+          if (mediaUrls[0] !== 'None') {
+            postRecord = {
               text: richText.text,
               facets: richText.facets,
-              reply: { root: rootId, parent: parentId },
-              embed: img,
+              reply: {
+                root: rootPostReference,
+                parent: parentPostReference,
+              },
+              embed: imageEmbed,
             };
-          } else if (card !== 'None') {
-            record = {
+          } else if (encodedLinkCard !== 'None') {
+            postRecord = {
               text: richText.text,
               facets: richText.facets,
-              reply: { root: rootId, parent: parentId },
-              embed: cardEmbed,
+              reply: {
+                root: rootPostReference,
+                parent: parentPostReference,
+              },
+              embed: linkCardEmbed,
             };
             console.log('record with card');
-            console.log(record);
+            console.log(postRecord);
           } else {
-            record = {
+            postRecord = {
               text: richText.text,
               facets: richText.facets,
-              reply: { root: rootId, parent: parentId },
+              reply: {
+                root: rootPostReference,
+                parent: parentPostReference,
+              },
             };
           }
         } else {
-          if (urls[0] !== 'None') {
+          if (mediaUrls[0] !== 'None') {
             console.log('there is a url.');
-            record = {
+            postRecord = {
               text: richText.text,
               facets: richText.facets,
-              embed: img,
+              embed: imageEmbed,
             };
-          } else if (card !== 'None') {
+          } else if (encodedLinkCard !== 'None') {
             console.log('there is a card.');
-            record = {
+            postRecord = {
               text: richText.text,
               facets: richText.facets,
-              embed: cardEmbed,
+              embed: linkCardEmbed,
             };
             console.log('record with card');
-            console.log(record);
+            console.log(postRecord);
           } else {
             console.log('no url or card');
-            record = {
+            postRecord = {
               text: richText.text,
               facets: richText.facets,
             };
           }
         }
-        return this.blueskyAgent.post(record);
+        return this.blueskyAgent.post(postRecord);
       } else {
-        return this.blueskyAgent.post(text);
+        return this.blueskyAgent.post(postText);
       }
     }
   }
@@ -351,78 +381,94 @@ export default class Bot {
     const dryRunFeedTexts = config.dryRun
       ? await bot.getRecentPostTexts()
       : undefined;
-    const mastodonAwait = await getPostText();
+    const serializedMastodonPostData = await getPostText();
 
-    const urlsStringsAltsCardsArr = mastodonAwait.split('~~~');
-    const mastUrlArr = urlsStringsAltsCardsArr[0].split('@#%');
-    const mastodonArr = urlsStringsAltsCardsArr[1].split('@#%');
-    const mastAltArr = urlsStringsAltsCardsArr[2].split('@#%');
-    const mastCardArr = urlsStringsAltsCardsArr[3].split('@#%');
-    const mastIdArr = urlsStringsAltsCardsArr[4].split('@#%');
+    const mastodonPostDataFields = serializedMastodonPostData.split('~~~');
+    const mastodonPostMediaUrls = mastodonPostDataFields[0].split('@#%');
+    const mastodonPostTexts = mastodonPostDataFields[1].split('@#%');
+    const mastodonPostMediaAltTexts = mastodonPostDataFields[2].split('@#%');
+    const mastodonPostLinkCards = mastodonPostDataFields[3].split('@#%');
+    const mastodonPostIds = mastodonPostDataFields[4].split('@#%');
 
-    const logDryRunPost = (postId: string, isReply: boolean, text: string) => {
-      if (dryRunFeedTexts && isDuplicateOrEmpty(text, dryRunFeedTexts)) {
+    const logDryRunPost = (
+      postId: string,
+      isReply: boolean,
+      postText: string,
+    ) => {
+      if (dryRunFeedTexts && isDuplicateOrEmpty(postText, dryRunFeedTexts)) {
         console.log(`[DRY RUN] Post ${postId} has already been mirrored.`);
         return;
       }
       console.log(
-        `[DRY RUN] Would ${isReply ? 'reply' : 'publish'} for Mastodon post ID ${postId} (${text.length} characters).`,
+        `[DRY RUN] Would ${isReply ? 'reply' : 'publish'} for Mastodon post ID ${postId} (${postText.length} characters).`,
       );
     };
 
-    for (let i = mastodonArr.length - 1; i >= 0; i--) {
+    for (
+      let postIndex = mastodonPostTexts.length - 1;
+      postIndex >= 0;
+      postIndex--
+    ) {
       console.log(
-        `${config.dryRun ? '[DRY RUN] ' : ''}Mirroring Mastodon post ID ${mastIdArr[i]}`,
+        `${config.dryRun ? '[DRY RUN] ' : ''}Mirroring Mastodon post ID ${mastodonPostIds[postIndex]}`,
       );
-      if (mastodonArr[i].length <= 300) {
+      if (mastodonPostTexts[postIndex].length <= 300) {
         if (config.dryRun) {
-          logDryRunPost(mastIdArr[i], false, mastodonArr[i]);
+          logDryRunPost(
+            mastodonPostIds[postIndex],
+            false,
+            mastodonPostTexts[postIndex],
+          );
         } else {
           await bot.post(
             false,
-            mastUrlArr[i],
-            mastAltArr[i],
-            mastCardArr[i],
-            mastodonArr[i],
+            mastodonPostMediaUrls[postIndex],
+            mastodonPostMediaAltTexts[postIndex],
+            mastodonPostLinkCards[postIndex],
+            mastodonPostTexts[postIndex],
           );
         }
       } else {
-        const wordArr = mastodonArr[i].split(' ');
-        let chunkLen = 0;
-        let chunkArr = [];
-        const threadArr = [];
-        let chunkStr = '';
-        while (wordArr.length !== 0) {
-          if (chunkLen + wordArr[0].length <= 294) {
-            chunkLen += wordArr[0].length + 1;
-            chunkArr.push(wordArr.shift());
+        const remainingWords = mastodonPostTexts[postIndex].split(' ');
+        let chunkLength = 0;
+        let chunkWords = [];
+        const threadPosts = [];
+        let chunkText = '';
+        while (remainingWords.length !== 0) {
+          if (chunkLength + remainingWords[0].length <= 294) {
+            chunkLength += remainingWords[0].length + 1;
+            chunkWords.push(remainingWords.shift());
           } else {
-            chunkStr = chunkArr.join(' ');
-            chunkArr = [];
-            chunkLen = 0;
-            threadArr.push(chunkStr);
+            chunkText = chunkWords.join(' ');
+            chunkWords = [];
+            chunkLength = 0;
+            threadPosts.push(chunkText);
           }
         }
-        chunkStr = chunkArr.join(' ');
-        threadArr.push(chunkStr);
+        chunkText = chunkWords.join(' ');
+        threadPosts.push(chunkText);
         let isReply = false;
-        for (let j = 0; j < threadArr.length; j++) {
-          const postText = `${threadArr[j]} [${j + 1}/${threadArr.length}]`;
+        for (
+          let threadPostIndex = 0;
+          threadPostIndex < threadPosts.length;
+          threadPostIndex++
+        ) {
+          const postText = `${threadPosts[threadPostIndex]} [${threadPostIndex + 1}/${threadPosts.length}]`;
           if (config.dryRun) {
-            logDryRunPost(mastIdArr[i], isReply, postText);
+            logDryRunPost(mastodonPostIds[postIndex], isReply, postText);
           } else {
             await bot.post(
               isReply,
-              mastUrlArr[i],
-              mastAltArr[i],
-              mastCardArr[i],
+              mastodonPostMediaUrls[postIndex],
+              mastodonPostMediaAltTexts[postIndex],
+              mastodonPostLinkCards[postIndex],
               postText,
             );
           }
           if (isReply === false) {
             isReply = true;
-            mastUrlArr[i] = 'None!^&None!^&None!^&None';
-            mastAltArr[i] = 'None!^&None!^&None!^&None';
+            mastodonPostMediaUrls[postIndex] = 'None!^&None!^&None!^&None';
+            mastodonPostMediaAltTexts[postIndex] = 'None!^&None!^&None!^&None';
           }
         }
       }

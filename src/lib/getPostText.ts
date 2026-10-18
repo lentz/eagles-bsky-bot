@@ -13,139 +13,127 @@ const mastodon = new Mastodon.API({
  * @returns A serialized string containing post text and associated media metadata.
  */
 export default async function getPostText(): Promise<string> {
-  // Regex list to address formatting discrepancies between Mastodon posts and Bluesky posts
-  const pReg = /<\/p><p>/g; // A regex to deal with <p></p>. This should create a new section in the text, which we do via 2 line breaks.
-  const brReg = /<br>/g; // A regex to deal with <br>. This should go to the next line, which we do via a line break.
-  const quoteReg = /\\"/g; // A regex to deal with \". This should be replaced with a " value with no \.
-  const andReg = /&amp;/g; // A regex to deal with &amp;. This should be replaced with &.
-  const logoReg = /&nbsp;/g; // A regex to deal with &nbsp;. Should be deleted.
-  const twitterReg = /@twitter.com/g; // A regex to deal with @twitter.com. Should be deleted.
-  const mastodonHandleReg = new RegExp(
+  const paragraphBoundaryRegExp = /<\/p><p>/g;
+  const lineBreakRegExp = /<br>/g;
+  const escapedQuoteRegExp = /\\"/g;
+  const ampersandEntityRegExp = /&amp;/g;
+  const nonbreakingSpaceEntityRegExp = /&nbsp;/g;
+  const twitterDomainMentionRegExp = /@twitter.com/g;
+  const mastodonHandleRegExp = new RegExp(
     RegExp.escape(config.mastodonHandle),
     'g',
   );
-  const sportsBotsReg = /@sportsbots.xyz/g;
-  const tagReg = /<(:?[^>]+)>/g; // A general regex for HTML. Used to get the plaintext value of the mastodon post without tag notation.
-  const invalidLinkReg = /\S*(\.com|\.ca|\.org|\.net)\S*(…|\.\.\.)/g;
-  const nbcsphillyReg = /@nbcsphilly/g; // Regex example for a substitution within the post text. Can be helpful for if you want to replace an X/Twitter handle with the user's name
+  const sportsBotsMentionRegExp = /@sportsbots.xyz/g;
+  const htmlTagRegExp = /<(:?[^>]+)>/g;
+  const truncatedUrlRegExp = /\S*(\.com|\.ca|\.org|\.net)\S*(…|\.\.\.)/g;
+  const nbcSportsPhillyMentionRegExp = /@nbcsphilly/g;
 
-  const accountLookup = await mastodon.get('accounts/lookup', {
+  const accountLookupResponse = await mastodon.get('accounts/lookup', {
     acct: config.mastodonHandle,
   });
-  if (accountLookup.error || accountLookup.status !== 200) {
+  if (accountLookupResponse.error || accountLookupResponse.status !== 200) {
     throw new Error(
       `Failed to look up Mastodon account "${config.mastodonHandle}"`,
-      { cause: accountLookup.error },
+      { cause: accountLookupResponse.error },
     );
   }
 
-  const account = accountLookup.json;
-  if (!account?.id) {
+  const mastodonAccount = accountLookupResponse.json;
+  if (!mastodonAccount?.id) {
     throw new Error(
       `Mastodon lookup returned no account ID for "${config.mastodonHandle}"`,
     );
   }
 
-  const awaitTweet = await mastodon.getStatuses(account.id, {
-    limit: config.postLimit,
-  });
-  const string = JSON.stringify(awaitTweet); // Convert the post into a JSON string.
-  const objJSON = JSON.parse(string).json; // Convert the JSON string back to a JSON object. Kinda silly, but it doesn't work otherwise.
-  const stringArr = []; // Initialize an empty array that we will store the regexed plaintexts in.
-  const urlArr = [];
-  const altTextArr = [];
-  const cardArr = [];
-  const idArr = [];
-  for (
-    let i = 0;
-    i < config.postLimit;
-    i++ // Iterate over all the posts we collected using the Mastodon API.
-  ) {
-    const postUrlArr = [];
-    const postAltTextArr = [];
-    idArr.push(objJSON[i].id);
-    for (let j = 0; j < 4; j++) {
-      if (objJSON[i].media_attachments[j] !== undefined) {
+  const mastodonStatusesResponse = await mastodon.getStatuses(
+    mastodonAccount.id,
+    {
+      limit: config.postLimit,
+    },
+  );
+  const serializedStatusesResponse = JSON.stringify(mastodonStatusesResponse);
+  const statuses = JSON.parse(serializedStatusesResponse).json;
+  const postTexts = [];
+  const postMediaUrls = [];
+  const postMediaAltTexts = [];
+  const postLinkCards = [];
+  const postIds = [];
+  for (let postIndex = 0; postIndex < config.postLimit; postIndex++) {
+    const status = statuses[postIndex];
+    const mediaUrls = [];
+    const mediaAltTexts = [];
+    postIds.push(status.id);
+    for (let attachmentIndex = 0; attachmentIndex < 4; attachmentIndex++) {
+      const attachment = status.media_attachments[attachmentIndex];
+      if (attachment !== undefined) {
         if (
-          objJSON[i].media_attachments[j].type === 'image' ||
-          objJSON[i].media_attachments[j].type === 'gifv' ||
-          objJSON[i].media_attachments[j].type === 'video'
+          attachment.type === 'image' ||
+          attachment.type === 'gifv' ||
+          attachment.type === 'video'
         ) {
-          postUrlArr.push(objJSON[i].media_attachments[j].url);
+          mediaUrls.push(attachment.url);
         } else {
-          postUrlArr.push('None');
+          mediaUrls.push('None');
         }
 
-        if (
-          objJSON[i].media_attachments[j].type === 'video' ||
-          objJSON[i].media_attachments[j].type === 'gifv'
-        ) {
-          postAltTextArr.push(
-            `${objJSON[i].media_attachments[j].meta.original.width}@#*${objJSON[i].media_attachments[j].meta.original.height}@#*${objJSON[i].media_attachments[j].meta.original.duration}@#*${objJSON[i].media_attachments[j].preview_url}`,
+        if (attachment.type === 'video' || attachment.type === 'gifv') {
+          mediaAltTexts.push(
+            `${attachment.meta.original.width}@#*${attachment.meta.original.height}@#*${attachment.meta.original.duration}@#*${attachment.preview_url}`,
           );
-        } else if (objJSON[i].media_attachments[j].description == null) {
-          postAltTextArr.push('None');
+        } else if (attachment.description == null) {
+          mediaAltTexts.push('None');
         } else {
-          postAltTextArr.push(objJSON[i].media_attachments[j].description);
+          mediaAltTexts.push(attachment.description);
         }
       } else {
-        postUrlArr.push('None');
-        postAltTextArr.push('None');
+        mediaUrls.push('None');
+        mediaAltTexts.push('None');
       }
     }
-    const postUrl = postUrlArr.join('!^&');
-    const postAltText = postAltTextArr.join('!^&');
-    urlArr.push(postUrl);
-    altTextArr.push(postAltText);
-    const contentJSON = objJSON[i].content; // Filter through all the values of the JSON object, to get just the content of post i.
-    let contentString = JSON.stringify(contentJSON); // Convert the content of the post into a JSON string.
-    contentString = contentString.slice(1, -1); // Remove the quotation marks.
-    contentString = contentString.replace(pReg, '\n\n');
-    contentString = contentString.replace(brReg, '\n');
-    contentString = contentString.replace(quoteReg, `"`);
-    contentString = contentString.replace(andReg, '&'); //Use the ", &, <p>, and <br> regexes to apply appropriate formatting. Then use the general regex to remove the HTML formatting from the Mastodon post.
-    contentString = contentString.replace(logoReg, '');
-    contentString = contentString.replace(twitterReg, '');
-    contentString = contentString.replace(mastodonHandleReg, config.bskyHandle);
-    contentString = contentString.replace(sportsBotsReg, '');
-    contentString = contentString.replace(tagReg, '');
-    contentString = contentString.replace(nbcsphillyReg, 'NBCSP');
+    postMediaUrls.push(mediaUrls.join('!^&'));
+    postMediaAltTexts.push(mediaAltTexts.join('!^&'));
+    const serializedContent = JSON.stringify(status.content);
+    let postText = serializedContent.slice(1, -1);
+    postText = postText.replace(paragraphBoundaryRegExp, '\n\n');
+    postText = postText.replace(lineBreakRegExp, '\n');
+    postText = postText.replace(escapedQuoteRegExp, `"`);
+    postText = postText.replace(ampersandEntityRegExp, '&');
+    postText = postText.replace(nonbreakingSpaceEntityRegExp, '');
+    postText = postText.replace(twitterDomainMentionRegExp, '');
+    postText = postText.replace(mastodonHandleRegExp, config.bskyHandle);
+    postText = postText.replace(sportsBotsMentionRegExp, '');
+    postText = postText.replace(htmlTagRegExp, '');
+    postText = postText.replace(nbcSportsPhillyMentionRegExp, 'NBCSP');
 
     if (
-      contentString.includes('RT ') ||
-      contentString.includes('Retweet ') ||
-      contentString.includes('retweet ') ||
-      contentString.includes('RETWEET ')
+      postText.includes('RT ') ||
+      postText.includes('Retweet ') ||
+      postText.includes('retweet ') ||
+      postText.includes('RETWEET ')
     ) {
-      contentString = `${contentString}\n\n (Offer not valid on Bluesky.)`;
+      postText = `${postText}\n\n (Offer not valid on Bluesky.)`;
     }
 
-    if (objJSON[i].card != null) {
-      contentString = contentString.replace(
-        invalidLinkReg,
-        objJSON[i].card.url,
-      );
-      const postCardArr = [];
-      postCardArr.push(objJSON[i].card.url);
-      postCardArr.push(objJSON[i].card.title);
-      postCardArr.push(objJSON[i].card.description);
-      postCardArr.push(objJSON[i].card.image);
-      const postCard = postCardArr.join('!^&');
-      cardArr.push(postCard);
+    if (status.card != null) {
+      postText = postText.replace(truncatedUrlRegExp, status.card.url);
+      const linkCardFields = [];
+      linkCardFields.push(status.card.url);
+      linkCardFields.push(status.card.title);
+      linkCardFields.push(status.card.description);
+      linkCardFields.push(status.card.image);
+      postLinkCards.push(linkCardFields.join('!^&'));
     } else {
-      cardArr.push('None');
+      postLinkCards.push('None');
     }
-    stringArr.push(contentString); // Add the regexed content to the array of plaintexts.
+    postTexts.push(postText);
   }
-  //urlArr[27] = "None!^&None!^&None!^&None";
-  //altTextArr[27] = "None!^&None!^&None!^&None";
 
-  const urls = urlArr.join('@#%');
-  const strings = stringArr.join('@#%'); // Turn the string array into a single string by joining them with a \/ delimiter. This will be undone when used by bot functions.
-  const alts = altTextArr.join('@#%');
-  const cards = cardArr.join('@#%');
-  const ids = idArr.join('@#%');
-  const urlsStringsAltsCardsArr = [urls, strings, alts, cards, ids];
-  const urlsStringsAltsCards = urlsStringsAltsCardsArr.join('~~~');
-  return urlsStringsAltsCards; // Return this singular concatenated string.
+  const serializedPostData = [
+    postMediaUrls.join('@#%'),
+    postTexts.join('@#%'),
+    postMediaAltTexts.join('@#%'),
+    postLinkCards.join('@#%'),
+    postIds.join('@#%'),
+  ];
+  return serializedPostData.join('~~~');
 }
