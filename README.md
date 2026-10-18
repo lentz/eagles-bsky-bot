@@ -21,6 +21,11 @@ variables already set in the shell take precedence. Do not commit `.env`.
 For GitHub Actions, add `BSKY_PASSWORD` and `MASTODON_ACCESS_TOKEN` under **Settings > Secrets and variables > Actions > Secrets**.
 Add `BSKY_HANDLE` and `MASTODON_HANDLE` under **Variables**.
 
+## Development
+
+Run the unit tests with `npm test`. They use Node's built-in test runner and mocked Mastodon/Bluesky responses; no
+service credentials or network access are needed.
+
 ## Workflow schedule
 
 The workflow's run frequency is configured by the `cron` expression in `.github/workflows/post.yml`. GitHub Actions can
@@ -32,5 +37,5 @@ re-run all jobs to push the bot to run again, if you so wish.
 ## Content Replacements
 
 The bot automatically replaces the configured `MASTODON_HANDLE` with `BSKY_HANDLE`. To add another substitution, edit
-`src/lib/getPostText.ts`: define a regular expression and apply it to `contentString` with the replacement text.
+`src/lib/mastodon.ts`: define a regular expression and apply it to `contentString` with the replacement text.
 For example, `/@nbcsphilly/g` can be replaced with `NBCSP`.

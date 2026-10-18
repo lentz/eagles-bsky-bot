@@ -12,7 +12,7 @@ const mastodon = new Mastodon.API({
  *
  * @returns A serialized string containing post text and associated media metadata.
  */
-export default async function getPostText(): Promise<string> {
+async function getPostText(mastodonClient = mastodon): Promise<string> {
   const paragraphBoundaryRegExp = /<\/p><p>/g;
   const lineBreakRegExp = /<br>/g;
   const escapedQuoteRegExp = /\\"/g;
@@ -28,7 +28,7 @@ export default async function getPostText(): Promise<string> {
   const truncatedUrlRegExp = /\S*(\.com|\.ca|\.org|\.net)\S*(…|\.\.\.)/g;
   const nbcSportsPhillyMentionRegExp = /@nbcsphilly/g;
 
-  const accountLookupResponse = await mastodon.get('accounts/lookup', {
+  const accountLookupResponse = await mastodonClient.get('accounts/lookup', {
     acct: config.mastodonHandle,
   });
   if (accountLookupResponse.error || accountLookupResponse.status !== 200) {
@@ -45,7 +45,7 @@ export default async function getPostText(): Promise<string> {
     );
   }
 
-  const mastodonStatusesResponse = await mastodon.getStatuses(
+  const mastodonStatusesResponse = await mastodonClient.getStatuses(
     mastodonAccount.id,
     {
       limit: config.postLimit,
@@ -139,3 +139,5 @@ export default async function getPostText(): Promise<string> {
   ];
   return serializedPostData.join('~~~');
 }
+
+export const mastodonApi = { getPostText };

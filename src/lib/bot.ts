@@ -7,7 +7,7 @@ import type {
 import { AtpAgent, RichText } from '@atproto/api';
 
 import { config } from './config.ts';
-import getPostText from './getPostText.ts';
+import { mastodonApi } from './mastodon.ts';
 
 async function fetchBuffer(mediaUrl: string): Promise<Buffer> {
   const mediaResponse = await fetch(mediaUrl);
@@ -44,8 +44,10 @@ export default class Bot {
   public rootCid = '';
   public rootUri = '';
 
-  constructor() {
-    this.blueskyAgent = new AtpAgent({ service: config.bskyService });
+  constructor(
+    blueskyAgent: AtpAgent = new AtpAgent({ service: config.bskyService }),
+  ) {
+    this.blueskyAgent = blueskyAgent;
   }
 
   /**
@@ -375,13 +377,16 @@ export default class Bot {
    *
    * @returns A promise that resolves when mirroring is complete.
    */
-  static async run() {
-    const bot = new Bot();
+  static async run(
+    blueskyAgent?: AtpAgent,
+    mastodon: typeof mastodonApi = mastodonApi,
+  ) {
+    const bot = new Bot(blueskyAgent);
     await bot.login(config.bskyHandle, config.bskyPassword);
     const dryRunFeedTexts = config.dryRun
       ? await bot.getRecentPostTexts()
       : undefined;
-    const serializedMastodonPostData = await getPostText();
+    const serializedMastodonPostData = await mastodon.getPostText();
 
     const mastodonPostDataFields = serializedMastodonPostData.split('~~~');
     const mastodonPostMediaUrls = mastodonPostDataFields[0].split('@#%');

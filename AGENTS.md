@@ -14,7 +14,7 @@ This bot mirrors recent posts from a configured Mastodon account to a Bluesky ac
 
 - `src/index.ts` is the entry point and calls `Bot.run()`.
 - `src/lib/config.ts` loads `.env` when present and validates all settings with Zod. Keep environment variable names and defaults aligned with `.env.example`, `README.md`, and `.github/workflows/post.yml`.
-- `src/lib/getPostText.ts` looks up the configured Mastodon account, fetches recent statuses, converts their HTML content to post text, and collects IDs, media, alt text, and link-card fields.
+- `src/lib/mastodon.ts` exports the Mastodon API object, including `getPostText`, which looks up the configured account, fetches recent statuses, converts their HTML content to post text, and collects IDs, media, alt text, and link-card fields.
 - `src/lib/bot.ts` parses that result, checks the Bluesky feed for duplicates, prepares image/video/link-card embeds, and publishes posts. Long Mastodon posts are split into a root post and replies; `DRY_RUN` logs intended actions instead of publishing.
 - `.github/workflows/post.yml` runs the bot on a schedule using Node 24 and `npm ci`.
 
