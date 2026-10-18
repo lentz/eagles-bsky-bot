@@ -8,10 +8,10 @@ const mastodon = new Mastodon.API({
 });
 
 /**
-	Fetches the configured Mastodon account's recent statuses and formats them as Bluesky posts.
-
-	@returns A string representing the desired text of the Bluesky posts we want to create. Text for different posts are delimited by \/ characters.
-*/
+ * Fetches and formats recent statuses from the configured Mastodon account.
+ *
+ * @returns A serialized string containing post text and associated media metadata.
+ */
 export default async function getPostText(): Promise<string> {
   // Regex list to address formatting discrepancies between Mastodon posts and Bluesky posts
   const pReg = /<\/p><p>/g; // A regex to deal with <p></p>. This should create a new section in the text, which we do via 2 line breaks.

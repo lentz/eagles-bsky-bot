@@ -46,10 +46,23 @@ export default class Bot {
     this.blueskyAgent = new AtpAgent({ service: config.bskyService });
   }
 
-  async login(loginOpts: AtpAgentLoginOpts) {
-    await this.blueskyAgent.login(loginOpts);
+  /**
+   * Authenticates the Bluesky agent.
+   *
+   * @param loginOpts - Credentials and options used to log in.
+   */
+  async login(handle: string, password: string) {
+    await this.blueskyAgent.login({
+      identifier: handle,
+      password,
+    });
   }
 
+  /**
+   * Retrieves recent text records from the configured Bluesky account.
+   *
+   * @returns Text from recent feed records that contain a string value.
+   */
   async getRecentPostTexts() {
     const response = await this.blueskyAgent.app.bsky.feed.getAuthorFeed({
       actor: config.bskyHandle,
@@ -61,10 +74,13 @@ export default class Bot {
   }
 
   /**
-    Performs a Bluesky POST request to the agent that has been logged in, posting the plaintext supplied by the text argument. Checks the text first to ensure that the text has not been posted recently by this user, and that the text is not blank. If either of these are the case, return an arbitrary value instead.
-
-    @returns The output of a successful Agent.post request if successful, int 37 on invalid input.
-  */
+   * Publishes a video post unless its text is empty or already in the recent feed.
+   *
+   * @param url - URL of the video to upload.
+   * @param alt - Encoded video dimensions and thumbnail metadata.
+   * @param text - Text or feed record to publish.
+   * @returns A promise that resolves when the video is published or skipped.
+   */
   async postVideo(
     url: string,
     alt: string,
@@ -77,7 +93,7 @@ export default class Bot {
       actor: config.bskyHandle,
       limit: config.postLimit,
     });
-    const bskyFeed = bskyFeedAwait.data.feed; // Filter down the await values so we are only looking at the feeds.
+    const bskyFeed = bskyFeedAwait.data.feed;
     const feedTexts = bskyFeed
       .map(({ post }) => getFeedPostText(post.record))
       .filter((feedText): feedText is string => feedText !== undefined);
@@ -91,10 +107,8 @@ export default class Bot {
 
     const metadataArr = alt.split('@#*');
 
-    // Fetch the video as a buffer
     const videoBuffer = await fetchBuffer(url);
 
-    // Upload the video
     const { data } = await this.blueskyAgent.com.atproto.repo.uploadBlob(
       new Uint8Array(videoBuffer),
     );
@@ -119,6 +133,16 @@ export default class Bot {
     });
   }
 
+  /**
+   * Publishes a post or reply with any available media or link-card embeds.
+   *
+   * @param isReply - Whether the post should reply to the preceding thread post.
+   * @param url - Encoded media URLs associated with the source post.
+   * @param alt - Encoded media descriptions and video metadata.
+   * @param card - Encoded link-card metadata, or `None` when no card exists.
+   * @param text - Text or feed record to publish.
+   * @returns The Bluesky post response, or `37` when the post is skipped.
+   */
   async post(
     isReply: boolean,
     url: string,
@@ -226,28 +250,25 @@ export default class Bot {
           actor: config.bskyHandle,
           limit: config.postLimit,
         },
-      ); // Get a defined number + 2 of most recent posts from the logged in user's feed.
-      const bskyFeed = bskyFeedAwait.data.feed; // Filter down the await values so we are only looking at the feeds.
-      let parentId = { uri: '', cid: '' }; // Initialize the parent ID as 2 empty strings. This should never matter, because it shouldn't be possible to use parentId without assigning it.
+      );
+      const bskyFeed = bskyFeedAwait.data.feed;
+      let parentId = { uri: '', cid: '' };
       if (isReply === false) {
-        // Check if this is not a reply, meaning it is a root post.
-        this.rootUri = ''; // Reset the root URI to the empty string, since we are no longer replying under a previous post.
-        this.rootCid = ''; // Reset the root CID to the empty string, since we are no longer replying under a previous post.
-      } // If this is a reply
-      else {
+        this.rootUri = '';
+        this.rootCid = '';
+      } else {
         const bskyPost0 = bskyFeed[0]?.post;
         if (!bskyPost0) {
           throw new Error(
             'Cannot create a reply because the Bluesky author feed has no posts.',
           );
         }
-        const bskyUri = bskyPost0.uri; // Collect the URI from the most recent post by the logged in user.
-        const bskyCid = bskyPost0.cid; // Collect the CID from the most recent post by the logged in user.
-        parentId = { uri: bskyUri, cid: bskyCid }; // Create an ID object using the URI and CID from the most recent post.
+        const bskyUri = bskyPost0.uri;
+        const bskyCid = bskyPost0.cid;
+        parentId = { uri: bskyUri, cid: bskyCid };
         if (this.rootUri === '') {
-          // Only change the root once per thread. Root stays constant regardless of if this is post 2 or post 37.
-          this.rootUri = bskyUri; // Change the root URI to be the most recent post's URI.
-          this.rootCid = bskyCid; // Change the root CID to be the most recent post's CID.
+          this.rootUri = bskyUri;
+          this.rootCid = bskyCid;
         }
       }
       const feedTexts = bskyFeed
@@ -258,51 +279,48 @@ export default class Bot {
         return '37';
       }
       if (typeof text === 'string') {
-        // Check that text is a string (This should always be the case in this codebase, but it seems to break if I get rid of the option for it to not be.)
-        const richText = new RichText({ text }); // Create a new RichText object from our text string. Sorta arcane object type detailed in ATProto API.
-        await richText.detectFacets(this.blueskyAgent); // Detect facets from the agent.
+        const richText = new RichText({ text });
+        await richText.detectFacets(this.blueskyAgent);
         let record: Partial<AppBskyFeedPost.Record> &
-          Omit<AppBskyFeedPost.Record, 'createdAt'>; // Create empty record variable that we will put our post details into.
+          Omit<AppBskyFeedPost.Record, 'createdAt'>;
         if (isReply === true) {
-          // If we are trying to post a reply
-          const rootId = { uri: this.rootUri, cid: this.rootCid }; // Format the root URI and root CID from the public object variables into a form that can be used.
+          const rootId = { uri: this.rootUri, cid: this.rootCid };
           if (urls[0] !== 'None') {
             record = {
-              text: richText.text, // Specify the text of our post as the text in the RichText obj (should be our plaintext string)
-              facets: richText.facets, // Specify the facets of our post to be the facets of the RichText.
-              reply: { root: rootId, parent: parentId }, // Specify the reply details. Make the root the values from our public root variables, make the parent the ID values collected from this function (the ones from the most recent post)
+              text: richText.text,
+              facets: richText.facets,
+              reply: { root: rootId, parent: parentId },
               embed: img,
             };
           } else if (card !== 'None') {
             record = {
-              text: richText.text, // Specify the text of our post as the text in the RichText obj (should be our plaintext string)
-              facets: richText.facets, // Specify the facets of our post to be the facets of the RichText.
-              reply: { root: rootId, parent: parentId }, // Specify the reply details. Make the root the values from our public root variables, make the parent the ID values collected from this function (the ones from the most recent post)
+              text: richText.text,
+              facets: richText.facets,
+              reply: { root: rootId, parent: parentId },
               embed: cardEmbed,
             };
             console.log('record with card');
             console.log(record);
           } else {
             record = {
-              text: richText.text, // Specify the text of our post as the text in the RichText obj (should be our plaintext string)
-              facets: richText.facets, // Specify the facets of our post to be the facets of the RichText.
-              reply: { root: rootId, parent: parentId }, // Specify the reply details. Make the root the values from our public root variables, make the parent the ID values collected from this function (the ones from the most recent post)
+              text: richText.text,
+              facets: richText.facets,
+              reply: { root: rootId, parent: parentId },
             };
           }
-        } // If we are trying to post a root post
-        else {
+        } else {
           if (urls[0] !== 'None') {
             console.log('there is a url.');
             record = {
-              text: richText.text, // Specify the text of our post as the text in the RichText obj (should be our plaintext string)
-              facets: richText.facets, // Specify the facets of our post to be the facets of the RichText.
+              text: richText.text,
+              facets: richText.facets,
               embed: img,
             };
           } else if (card !== 'None') {
             console.log('there is a card.');
             record = {
-              text: richText.text, // Specify the text of our post as the text in the RichText obj (should be our plaintext string)
-              facets: richText.facets, // Specify the facets of our post to be the facets of the RichText.
+              text: richText.text,
+              facets: richText.facets,
               embed: cardEmbed,
             };
             console.log('record with card');
@@ -310,41 +328,30 @@ export default class Bot {
           } else {
             console.log('no url or card');
             record = {
-              text: richText.text, // Specify the text of our post as the text in the RichText obj (should be our plaintext string)
-              facets: richText.facets, // Specify the facets of our post to be the facets of the RichText.
+              text: richText.text,
+              facets: richText.facets,
             };
           }
         }
-        return this.blueskyAgent.post(record); // Post the record we have specified using the Bluesky agent, return the output from doing this.
-      } // If we are trying to post text not in the format of a string. Shouldn't happen in this unmodified codebase, I don't think
-      else {
-        return this.blueskyAgent.post(text); // Post the raw text value using the Bluesky agent, return the output from doing this.
+        return this.blueskyAgent.post(record);
+      } else {
+        return this.blueskyAgent.post(text);
       }
     }
   }
 
-  /*
-      run(getPostText, botOptions?):
-
-      This function creates the Bot object, collects recent Mastodon posts from the desired Mastodon account, and queues Bot.post requests. This function is also responsible for parsing text from HTML to plaintext, and chunking text longer than 300 characters.
-
-      args:
-        getPostText: function value that returns a string value, which is then parsed out into a String[] value. Used to get the most recent Mastodon posts.
-        botOptions?: optional BotOptions value that allows us to change the settings of the bot as needed. Default is usually fine.
-
-      returns: void
-    */
-
+  /**
+   * Mirrors recent Mastodon posts to Bluesky, splitting long posts into threads.
+   *
+   * @returns A promise that resolves when mirroring is complete.
+   */
   static async run() {
     const bot = new Bot();
-    await bot.login({
-      identifier: config.bskyHandle,
-      password: config.bskyPassword,
-    });
+    await bot.login(config.bskyHandle, config.bskyPassword);
     const dryRunFeedTexts = config.dryRun
       ? await bot.getRecentPostTexts()
       : undefined;
-    const mastodonAwait = await getPostText(); // Get the desired number of recent Mastodon posts from the specified user in getPostText.
+    const mastodonAwait = await getPostText();
 
     const urlsStringsAltsCardsArr = mastodonAwait.split('~~~');
     const mastUrlArr = urlsStringsAltsCardsArr[0].split('@#%');
@@ -363,16 +370,11 @@ export default class Bot {
       );
     };
 
-    for (
-      let i = mastodonArr.length - 1;
-      i >= 0;
-      i-- // Iterate over the recent Mastodon posts in reverse sequential order. -1 may not be necessary, do some more testing.
-    ) {
+    for (let i = mastodonArr.length - 1; i >= 0; i--) {
       console.log(
         `${config.dryRun ? '[DRY RUN] ' : ''}Mirroring Mastodon post ID ${mastIdArr[i]}`,
       );
       if (mastodonArr[i].length <= 300) {
-        // Simple case, where a post is 300 characters or less, within the length bounds of a Bluesky post.
         if (config.dryRun) {
           logDryRunPost(mastIdArr[i], false, mastodonArr[i]);
         } else {
@@ -382,37 +384,29 @@ export default class Bot {
             mastAltArr[i],
             mastCardArr[i],
             mastodonArr[i],
-          ); // Run bot.post on this text value, posting to Bluesky if the text is new. Post this as a root value.
+          );
         }
-      } // Complicated case where a post is longer than 300 characters, longer than a valid Bluesky post.
-      else {
-        const wordArr = mastodonArr[i].split(' '); // Turn the string into an array of words parsed by spaces.
-        let chunkLen = 0; // Initialize the length of a chunk to 0.
-        let chunkArr = []; // Initialize the array storing the words contained in the chunk to be empty.
-        const threadArr = []; // Initialize the array storing the chunk strings to be empty.
-        let chunkStr = ''; // Initialize the chunk string to be empty.
+      } else {
+        const wordArr = mastodonArr[i].split(' ');
+        let chunkLen = 0;
+        let chunkArr = [];
+        const threadArr = [];
+        let chunkStr = '';
         while (wordArr.length !== 0) {
-          // Loop while there are still words in the array to chunk.
           if (chunkLen + wordArr[0].length <= 294) {
-            // If adding the next word in the array to the chunk will not cause it to surpass the max length:
-            chunkLen += wordArr[0].length + 1; // Increase the chunk length by the length of the word being added.
-            chunkArr.push(wordArr.shift()); // Add the new word to the end of the chunk array, while also removing it from the front of the word array.
-          } // If the max length is surpassed by adding the next word to the chunk:
-          else {
-            chunkStr = chunkArr.join(' '); // Turn the chunk into a string by delimiting the words with spaces.
-            chunkArr = []; // Empty the chunk array.
-            chunkLen = 0; // Reset the chunk length to 0.
-            threadArr.push(chunkStr); // Add the chunk string to the thread array.
+            chunkLen += wordArr[0].length + 1;
+            chunkArr.push(wordArr.shift());
+          } else {
+            chunkStr = chunkArr.join(' ');
+            chunkArr = [];
+            chunkLen = 0;
+            threadArr.push(chunkStr);
           }
         }
-        chunkStr = chunkArr.join(' '); // Turn the last chunk into a string by delimiting the words with spaces.
-        threadArr.push(chunkStr); // Add the last chunk string to the thread array.
-        let isReply = false; // Create a boolean value to determine if we want to post a root post or a reply. Start with a root post.
-        for (
-          let j = 0;
-          j < threadArr.length;
-          j++ // Iterate over all of the chunk strings contained in the thread array.
-        ) {
+        chunkStr = chunkArr.join(' ');
+        threadArr.push(chunkStr);
+        let isReply = false;
+        for (let j = 0; j < threadArr.length; j++) {
           const postText = `${threadArr[j]} [${j + 1}/${threadArr.length}]`;
           if (config.dryRun) {
             logDryRunPost(mastIdArr[i], isReply, postText);
@@ -423,17 +417,16 @@ export default class Bot {
               mastAltArr[i],
               mastCardArr[i],
               postText,
-            ); // Post string j in the thread array.
+            );
           }
           if (isReply === false) {
-            // If this post was posted as a root, meaning that this is the first iteration:
-            isReply = true; // Set the boolean value to post as replies for the remaining iterations.
+            isReply = true;
             mastUrlArr[i] = 'None!^&None!^&None!^&None';
             mastAltArr[i] = 'None!^&None!^&None!^&None';
           }
         }
       }
     }
-    return; // Return void, we're done.
+    return;
   }
 }
