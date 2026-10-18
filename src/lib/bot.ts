@@ -222,9 +222,9 @@ export default class Bot {
         };
       }
 
-      for (let attachmentIndex = 0; attachmentIndex < 4; attachmentIndex++) {
-        if (mediaUrls[attachmentIndex] !== 'None') {
-          const imageBuffer = await fetchBuffer(mediaUrls[attachmentIndex]);
+      for (const [attachmentIndex, mediaUrl] of mediaUrls.entries()) {
+        if (mediaUrl !== 'None') {
+          const imageBuffer = await fetchBuffer(mediaUrl);
           if (imageBuffer.length <= 1000000) {
             const imageUploadResponse =
               await this.blueskyAgent.com.atproto.repo.uploadBlob(
@@ -404,71 +404,67 @@ export default class Bot {
       );
     };
 
-    for (
-      let postIndex = mastodonPostTexts.length - 1;
-      postIndex >= 0;
-      postIndex--
-    ) {
+    const mastodonPosts = mastodonPostTexts
+      .map((postText, postIndex) => ({
+        postId: mastodonPostIds[postIndex],
+        text: postText,
+        mediaUrls: mastodonPostMediaUrls[postIndex],
+        mediaAltTexts: mastodonPostMediaAltTexts[postIndex],
+        linkCard: mastodonPostLinkCards[postIndex],
+      }))
+      .reverse();
+
+    for (const mastodonPost of mastodonPosts) {
+      let mediaUrls = mastodonPost.mediaUrls;
+      let mediaAltTexts = mastodonPost.mediaAltTexts;
       console.log(
-        `${config.dryRun ? '[DRY RUN] ' : ''}Mirroring Mastodon post ID ${mastodonPostIds[postIndex]}`,
+        `${config.dryRun ? '[DRY RUN] ' : ''}Mirroring Mastodon post ID ${mastodonPost.postId}`,
       );
-      if (mastodonPostTexts[postIndex].length <= 300) {
+      if (mastodonPost.text.length <= 300) {
         if (config.dryRun) {
-          logDryRunPost(
-            mastodonPostIds[postIndex],
-            false,
-            mastodonPostTexts[postIndex],
-          );
+          logDryRunPost(mastodonPost.postId, false, mastodonPost.text);
         } else {
           await bot.post(
             false,
-            mastodonPostMediaUrls[postIndex],
-            mastodonPostMediaAltTexts[postIndex],
-            mastodonPostLinkCards[postIndex],
-            mastodonPostTexts[postIndex],
+            mediaUrls,
+            mediaAltTexts,
+            mastodonPost.linkCard,
+            mastodonPost.text,
           );
         }
       } else {
-        const remainingWords = mastodonPostTexts[postIndex].split(' ');
+        const words = mastodonPost.text.split(' ');
         let chunkLength = 0;
         let chunkWords = [];
         const threadPosts = [];
-        let chunkText = '';
-        while (remainingWords.length !== 0) {
-          if (chunkLength + remainingWords[0].length <= 294) {
-            chunkLength += remainingWords[0].length + 1;
-            chunkWords.push(remainingWords.shift());
-          } else {
-            chunkText = chunkWords.join(' ');
+        for (const word of words) {
+          if (chunkLength + word.length > 294 && chunkWords.length > 0) {
+            threadPosts.push(chunkWords.join(' '));
             chunkWords = [];
             chunkLength = 0;
-            threadPosts.push(chunkText);
           }
+          chunkLength += word.length + 1;
+          chunkWords.push(word);
         }
-        chunkText = chunkWords.join(' ');
-        threadPosts.push(chunkText);
+        threadPosts.push(chunkWords.join(' '));
         let isReply = false;
-        for (
-          let threadPostIndex = 0;
-          threadPostIndex < threadPosts.length;
-          threadPostIndex++
-        ) {
-          const postText = `${threadPosts[threadPostIndex]} [${threadPostIndex + 1}/${threadPosts.length}]`;
+        for (const [threadPostIndex, threadPost] of threadPosts.entries()) {
+          const postText = `${threadPost} [${threadPostIndex + 1}/${threadPosts.length}]`;
           if (config.dryRun) {
-            logDryRunPost(mastodonPostIds[postIndex], isReply, postText);
+            logDryRunPost(mastodonPost.postId, isReply, postText);
           } else {
             await bot.post(
               isReply,
-              mastodonPostMediaUrls[postIndex],
-              mastodonPostMediaAltTexts[postIndex],
-              mastodonPostLinkCards[postIndex],
+              mediaUrls,
+              mediaAltTexts,
+              mastodonPost.linkCard,
               postText,
             );
           }
           if (isReply === false) {
             isReply = true;
-            mastodonPostMediaUrls[postIndex] = 'None!^&None!^&None!^&None';
-            mastodonPostMediaAltTexts[postIndex] = 'None!^&None!^&None!^&None';
+            mediaUrls = 'None!^&None!^&None!^&None';
+            mediaAltTexts = 'None!^&None!^&None!^&None';
           }
         }
       }

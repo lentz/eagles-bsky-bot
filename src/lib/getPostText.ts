@@ -58,13 +58,15 @@ export default async function getPostText(): Promise<string> {
   const postMediaAltTexts = [];
   const postLinkCards = [];
   const postIds = [];
-  for (let postIndex = 0; postIndex < config.postLimit; postIndex++) {
-    const status = statuses[postIndex];
+  for (const status of statuses.slice(0, config.postLimit)) {
     const mediaUrls = [];
     const mediaAltTexts = [];
     postIds.push(status.id);
-    for (let attachmentIndex = 0; attachmentIndex < 4; attachmentIndex++) {
-      const attachment = status.media_attachments[attachmentIndex];
+    const attachments = Array.from(
+      { length: 4 },
+      (_, attachmentIndex) => status.media_attachments[attachmentIndex],
+    );
+    for (const attachment of attachments) {
       if (attachment !== undefined) {
         if (
           attachment.type === 'image' ||
