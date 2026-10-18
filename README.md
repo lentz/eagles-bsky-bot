@@ -12,7 +12,7 @@ variables already set in the shell take precedence. Do not commit `.env`.
 | --- | --- | --- | --- |
 | `BSKY_HANDLE` | Yes | — | Bluesky account handle used to log in and identify the account's feed. |
 | `BSKY_PASSWORD` | Yes | — | Bluesky account password or app password. |
-| `DRY_RUN` | No | `false` | When `true`, the bot does not publish posts. |
+| `DRY_RUN` | No | `false` | When `true`, the bot logs a summary of posts it would publish or skip without publishing them. |
 | `MASTODON_ACCESS_TOKEN` | Yes | — | Mastodon API token with read access to statuses. Keep this secret. |
 | `MASTODON_HANDLE` | Yes | — | Mastodon account handle to replace with the Bluesky handle in mirrored post text, e.g. `@TEAM@sportsbots.xyz`. |
 | `BSKY_SERVICE` | No | `https://bsky.social` | Bluesky service endpoint. |

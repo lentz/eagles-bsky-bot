@@ -1,21 +1,18 @@
 import * as Mastodon from 'tsl-mastodon-api';
+
 import { config } from './config.ts';
 
 const mastodon = new Mastodon.API({
   access_token: config.mastodonAccessToken,
   api_url: 'https://mastodon.social/api/v1/',
-}); // access the Mastodon API using the access token.
+});
 
-/*
-	getPostText():
+/**
+	Fetches the configured Mastodon account's recent statuses and formats them as Bluesky posts.
 
-	This function fetches the configured Mastodon account's recent statuses and formats them as Bluesky posts.
-
-	args: None
-
-	returns: A string representing the desired text of the Bluesky posts we want to create. Text for different posts are delimited by \/ characters.
+	@returns A string representing the desired text of the Bluesky posts we want to create. Text for different posts are delimited by \/ characters.
 */
-export default async function getPostText() {
+export default async function getPostText(): Promise<string> {
   // Regex list to address formatting discrepancies between Mastodon posts and Bluesky posts
   const pReg = /<\/p><p>/g; // A regex to deal with <p></p>. This should create a new section in the text, which we do via 2 line breaks.
   const brReg = /<br>/g; // A regex to deal with <br>. This should go to the next line, which we do via a line break.
@@ -43,12 +40,7 @@ export default async function getPostText() {
   }
 
   const account = accountLookup.json;
-  if (
-    typeof account !== 'object' ||
-    account === null ||
-    !('id' in account) ||
-    typeof account.id !== 'string'
-  ) {
+  if (!account?.id) {
     throw new Error(
       `Mastodon lookup returned no account ID for "${config.mastodonHandle}"`,
     );

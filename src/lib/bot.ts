@@ -4,15 +4,11 @@ import type {
   AppBskyEmbedImages,
   AppBskyFeedPost,
   AtpAgentLoginOpts,
-  AtpAgentOptions,
 } from '@atproto/api';
 import { AtpAgent, RichText } from '@atproto/api';
-import { config } from './config.ts';
 
-type BotOptions = {
-  service: string | URL;
-  dryRun: boolean;
-};
+import { config } from './config.ts';
+import getPostText from './getPostText.ts';
 
 async function fetchBuffer(url: string): Promise<Buffer> {
   const response = await fetch(url);
@@ -24,61 +20,52 @@ async function fetchBuffer(url: string): Promise<Buffer> {
   return Buffer.from(await response.arrayBuffer());
 }
 
+function getFeedPostText(record: unknown): string | undefined {
+  if (
+    typeof record === 'object' &&
+    record !== null &&
+    'text' in record &&
+    typeof record.text === 'string'
+  ) {
+    return record.text;
+  }
+  return undefined;
+}
+
+function isDuplicateOrEmpty(text: string, feedTexts: readonly string[]) {
+  return text.length === 0 || feedTexts.includes(text);
+}
+
 export default class Bot {
-  userAgent; // Private value containing our bluesky agent.
+  blueskyAgent: AtpAgent;
 
-  public rootCid: string; // Public variable in the class to store the CID of the most recent non-reply post, the root we need for replies.
-  public rootUri: string; // Public variable in the class to store the URI of the most recent non-reply post, the root we need for replies.
+  public rootCid = '';
+  public rootUri = '';
 
-  static defaultOptions: BotOptions = {
-    service: config.bskyService, // Variable detailing the service we want to initialize the Bluesky agent on.
-    dryRun: config.dryRun,
-  } as const; // Per-run bot options can override these config-based defaults.
-
-  /*
-    constructor(service):
-
-    This function sets the parameters of the Bot object on initialization.
-
-    args:
-      service: An AtpAgentOpts value that specifies what Bluesky service to use.
-
-    returns: void
-  */
-  constructor(service: AtpAgentOptions['service']) {
-    this.userAgent = new AtpAgent({ service }); // Initialize the Bluesky agent on the specified service. Allows us to interface with the Bluesky API.
-    this.rootCid = ''; // Initialize the root CID as the empty string. Only define this as a value when attempting to post a reply.
-    this.rootUri = ''; // Initialize the root URI as the empty string. Only define this as a value when attempting to post a reply.
+  constructor() {
+    this.blueskyAgent = new AtpAgent({ service: config.bskyService });
   }
 
-  /*
-    login(loginOpts):
-
-    This function logs the Agent into the Bluesky account.
-
-    args:
-      loginOpts: an AtpAgentLoginOpts object that specifies the options to be used to login. 
-
-    returns: The output of an Agent.login request.
-  */
   async login(loginOpts: AtpAgentLoginOpts) {
-    await this.userAgent.login(loginOpts); // Login to Bluesky using the specified login details. Allows us to access Bluesky via the account we are logging in.
+    await this.blueskyAgent.login(loginOpts);
   }
 
-  /*
-    post(isReply, text):
+  async getRecentPostTexts() {
+    const response = await this.blueskyAgent.app.bsky.feed.getAuthorFeed({
+      actor: config.bskyHandle,
+      limit: config.postLimit,
+    });
+    return response.data.feed
+      .map(({ post }) => getFeedPostText(post.record))
+      .filter((text): text is string => text !== undefined);
+  }
 
-    This function performs a Bluesky POST request to the agent that has been logged in, posting the plaintext supplied by the text argument. Checks the text first to ensure that the text has not been posted recently by this user, and that the text is not blank. If either of these are the case, return an arbitrary value instead.
+  /**
+    Performs a Bluesky POST request to the agent that has been logged in, posting the plaintext supplied by the text argument. Checks the text first to ensure that the text has not been posted recently by this user, and that the text is not blank. If either of these are the case, return an arbitrary value instead.
 
-    args:
-      isReply: boolean value that determines whether the post is made as a reply to the previous post made, or as a root post. Use isReply == 0 for a root post, isReply == 1 for a reply to the previous post.
-      text: string or record (but usually string) value that determines the plaintext to post. 
-
-    returns: The output of a successful Agent.post request if successful, int 37 on invalid input.
+    @returns The output of a successful Agent.post request if successful, int 37 on invalid input.
   */
-
   async postVideo(
-    _isReply: boolean,
     url: string,
     alt: string,
     text:
@@ -86,27 +73,20 @@ export default class Bot {
       | (Partial<AppBskyFeedPost.Record> &
           Omit<AppBskyFeedPost.Record, 'createdAt'>),
   ): Promise<void> {
-    const bskyFeedAwait = await this.userAgent.app.bsky.feed.getAuthorFeed({
+    const bskyFeedAwait = await this.blueskyAgent.app.bsky.feed.getAuthorFeed({
       actor: config.bskyHandle,
       limit: config.postLimit,
-    }); // Get a defined number + 2 of most recent posts from the logged in user's feed.
+    });
     const bskyFeed = bskyFeedAwait.data.feed; // Filter down the await values so we are only looking at the feeds.
-    for (
-      let i = 0;
-      i < bskyFeed.length;
-      i++ // Consider all collected posts.
-    ) {
-      const bskyPost = bskyFeed[i]; // Get the post i from the collected Bluesky feed.
-      const bskyRecord = bskyPost.post.record; // Filter post i down so we are only considering the record.
-      const bskyEntries = Object.entries(bskyRecord); // Accessing the values from here is weird, so I put them all in an array and access the one corresponding to text (0,1).
-      const bskyText = bskyEntries[bskyEntries.length - 1][1];
-      if (text === bskyText || text === '') {
-        // Check if the text we are trying to post has already been posted in the last config.postLimit posts, or is empty. Might change empty conditional if I get images working.
-        console.log(
-          `Skipping video post: empty text or duplicate of Bluesky feed entry ${i}.`,
-        );
-        return;
-      }
+    const feedTexts = bskyFeed
+      .map(({ post }) => getFeedPostText(post.record))
+      .filter((feedText): feedText is string => feedText !== undefined);
+
+    if (typeof text === 'string' && isDuplicateOrEmpty(text, feedTexts)) {
+      console.log(`Post has already been mirrored.`);
+      return;
+    } else if (typeof text !== 'string') {
+      return;
     }
 
     const metadataArr = alt.split('@#*');
@@ -115,7 +95,7 @@ export default class Bot {
     const videoBuffer = await fetchBuffer(url);
 
     // Upload the video
-    const { data } = await this.userAgent.com.atproto.repo.uploadBlob(
+    const { data } = await this.blueskyAgent.com.atproto.repo.uploadBlob(
       new Uint8Array(videoBuffer),
     );
 
@@ -125,20 +105,18 @@ export default class Bot {
 
     console.log('Video uploaded, posting...');
 
-    if (typeof text === 'string') {
-      const _postResponse = await this.userAgent.post({
-        text: text,
-        langs: ['en'],
-        embed: {
-          $type: 'app.bsky.embed.video',
-          video: data.blob,
-          aspectRatio: {
-            width: parseInt(metadataArr[0], 10),
-            height: parseInt(metadataArr[1], 10),
-          },
+    await this.blueskyAgent.post({
+      text: text,
+      langs: ['en'],
+      embed: {
+        $type: 'app.bsky.embed.video',
+        video: data.blob,
+        aspectRatio: {
+          width: parseInt(metadataArr[0], 10),
+          height: parseInt(metadataArr[1], 10),
         },
-      });
-    }
+      },
+    });
   }
 
   async post(
@@ -158,7 +136,7 @@ export default class Bot {
     let cardEmbed: $Typed<AppBskyEmbedExternal.Main> | undefined;
 
     const { data: serviceAuth } =
-      await this.userAgent.com.atproto.server.getServiceAuth({
+      await this.blueskyAgent.com.atproto.server.getServiceAuth({
         aud: 'did:web:video.bsky.app',
         lxm: 'app.bsky.video.getUploadLimits',
         exp: Date.now() / 1000 + 60 * 30,
@@ -181,7 +159,7 @@ export default class Bot {
       parseFloat(alts[0].split('@#*')[2]) <= 600 &&
       limits.canUpload === true
     ) {
-      await this.postVideo(false, urls[0], alts[0], text);
+      await this.postVideo(urls[0], alts[0], text);
       return 37;
     } else {
       if (urls[0].slice(-3) === 'mp4') {
@@ -196,7 +174,7 @@ export default class Bot {
       }
       if (card !== 'None' && urls[0] === 'None') {
         const cardBuffer = await fetchBuffer(cards[3]);
-        const cardUpload = await this.userAgent.com.atproto.repo.uploadBlob(
+        const cardUpload = await this.blueskyAgent.com.atproto.repo.uploadBlob(
           new Uint8Array(cardBuffer),
           { encoding: 'image/png' },
         );
@@ -213,7 +191,7 @@ export default class Bot {
         if (urls[i] !== 'None') {
           const buffer = await fetchBuffer(urls[i]);
           if (buffer.length <= 1000000) {
-            const upload = await this.userAgent.com.atproto.repo.uploadBlob(
+            const upload = await this.blueskyAgent.com.atproto.repo.uploadBlob(
               new Uint8Array(buffer),
               { encoding: 'image/png' },
             );
@@ -243,10 +221,12 @@ export default class Bot {
         }
       }
 
-      const bskyFeedAwait = await this.userAgent.app.bsky.feed.getAuthorFeed({
-        actor: config.bskyHandle,
-        limit: config.postLimit,
-      }); // Get a defined number + 2 of most recent posts from the logged in user's feed.
+      const bskyFeedAwait = await this.blueskyAgent.app.bsky.feed.getAuthorFeed(
+        {
+          actor: config.bskyHandle,
+          limit: config.postLimit,
+        },
+      ); // Get a defined number + 2 of most recent posts from the logged in user's feed.
       const bskyFeed = bskyFeedAwait.data.feed; // Filter down the await values so we are only looking at the feeds.
       let parentId = { uri: '', cid: '' }; // Initialize the parent ID as 2 empty strings. This should never matter, because it shouldn't be possible to use parentId without assigning it.
       if (isReply === false) {
@@ -270,27 +250,17 @@ export default class Bot {
           this.rootCid = bskyCid; // Change the root CID to be the most recent post's CID.
         }
       }
-      for (
-        let i = 0;
-        i < bskyFeed.length;
-        i++ // Consider all collected posts.
-      ) {
-        const bskyPost = bskyFeed[i]; // Get the post i from the collected Bluesky feed.
-        const bskyRecord = bskyPost.post.record; // Filter post i down so we are only considering the record.
-        const bskyEntries = Object.entries(bskyRecord); // Accessing the values from here is weird, so I put them all in an array and access the one corresponding to text (0,1).
-        const bskyText = bskyEntries[bskyEntries.length - 1][1];
-        if (text === bskyText || text === '') {
-          // Check if the text we are trying to post has already been posted in the last config.postLimit posts, or is empty. Might change empty conditional if I get images working.
-          console.log(
-            `Skipping post: empty text or duplicate of Bluesky feed entry ${i}.`,
-          );
-          return '37'; // Output an arbitrary value that can be treated as a fail code. Could be anything, I picked 37 because I like the number 37.
-        }
+      const feedTexts = bskyFeed
+        .map(({ post }) => getFeedPostText(post.record))
+        .filter((feedText): feedText is string => feedText !== undefined);
+      if (typeof text === 'string' && isDuplicateOrEmpty(text, feedTexts)) {
+        console.log('Post has already been mirrored.');
+        return '37';
       }
       if (typeof text === 'string') {
         // Check that text is a string (This should always be the case in this codebase, but it seems to break if I get rid of the option for it to not be.)
         const richText = new RichText({ text }); // Create a new RichText object from our text string. Sorta arcane object type detailed in ATProto API.
-        await richText.detectFacets(this.userAgent); // Detect facets from the agent.
+        await richText.detectFacets(this.blueskyAgent); // Detect facets from the agent.
         let record: Partial<AppBskyFeedPost.Record> &
           Omit<AppBskyFeedPost.Record, 'createdAt'>; // Create empty record variable that we will put our post details into.
         if (isReply === true) {
@@ -345,10 +315,10 @@ export default class Bot {
             };
           }
         }
-        return this.userAgent.post(record); // Post the record we have specified using the Bluesky agent, return the output from doing this.
+        return this.blueskyAgent.post(record); // Post the record we have specified using the Bluesky agent, return the output from doing this.
       } // If we are trying to post text not in the format of a string. Shouldn't happen in this unmodified codebase, I don't think
       else {
-        return this.userAgent.post(text); // Post the raw text value using the Bluesky agent, return the output from doing this.
+        return this.blueskyAgent.post(text); // Post the raw text value using the Bluesky agent, return the output from doing this.
       }
     }
   }
@@ -359,24 +329,21 @@ export default class Bot {
       This function creates the Bot object, collects recent Mastodon posts from the desired Mastodon account, and queues Bot.post requests. This function is also responsible for parsing text from HTML to plaintext, and chunking text longer than 300 characters.
 
       args:
-        getPostText: function value that returns a string value, which is then parsed out into a String[] value. Used to get the most recent Mastodon posts. 
-        botOptions?: optional BotOptions value that allows us to change the settings of the bot as needed. Default is usually fine. 
+        getPostText: function value that returns a string value, which is then parsed out into a String[] value. Used to get the most recent Mastodon posts.
+        botOptions?: optional BotOptions value that allows us to change the settings of the bot as needed. Default is usually fine.
 
       returns: void
     */
 
-  static async run(
-    getPostText: () => Promise<string>,
-    botOptions?: Partial<BotOptions>,
-  ) {
-    const { service, dryRun } = botOptions
-      ? Object.assign({}, Bot.defaultOptions, botOptions) //Set the bot's options.
-      : Bot.defaultOptions;
-    const bot = new Bot(service); // Instantiate a constant bot value as a new Bot under the supplied Bluesky service.
+  static async run() {
+    const bot = new Bot();
     await bot.login({
       identifier: config.bskyHandle,
       password: config.bskyPassword,
-    }); // Log the bot into the specified Bluesky account.
+    });
+    const dryRunFeedTexts = config.dryRun
+      ? await bot.getRecentPostTexts()
+      : undefined;
     const mastodonAwait = await getPostText(); // Get the desired number of recent Mastodon posts from the specified user in getPostText.
 
     const urlsStringsAltsCardsArr = mastodonAwait.split('~~~');
@@ -386,65 +353,83 @@ export default class Bot {
     const mastCardArr = urlsStringsAltsCardsArr[3].split('@#%');
     const mastIdArr = urlsStringsAltsCardsArr[4].split('@#%');
 
-    if (!dryRun) {
-      // Make sure that we don't wanna run the bot without posting. Tbh, I think I might have broken this feature through my changes to the source code. May need to reimplement dry run as a working option when I generalize the code for other purposes.
-      for (
-        let i = mastodonArr.length - 1;
-        i >= 0;
-        i-- // Iterate over the recent Mastodon posts in reverse sequential order. -1 may not be necessary, do some more testing.
-      ) {
-        console.log(`Mirroring Mastodon post ID ${mastIdArr[i]}`);
-        if (mastodonArr[i].length <= 300) {
-          // Simple case, where a post is 300 characters or less, within the length bounds of a Bluesky post.
+    const logDryRunPost = (postId: string, isReply: boolean, text: string) => {
+      if (dryRunFeedTexts && isDuplicateOrEmpty(text, dryRunFeedTexts)) {
+        console.log(`[DRY RUN] Post ${postId} has already been mirrored.`);
+        return;
+      }
+      console.log(
+        `[DRY RUN] Would ${isReply ? 'reply' : 'publish'} for Mastodon post ID ${postId} (${text.length} characters).`,
+      );
+    };
+
+    for (
+      let i = mastodonArr.length - 1;
+      i >= 0;
+      i-- // Iterate over the recent Mastodon posts in reverse sequential order. -1 may not be necessary, do some more testing.
+    ) {
+      console.log(
+        `${config.dryRun ? '[DRY RUN] ' : ''}Mirroring Mastodon post ID ${mastIdArr[i]}`,
+      );
+      if (mastodonArr[i].length <= 300) {
+        // Simple case, where a post is 300 characters or less, within the length bounds of a Bluesky post.
+        if (config.dryRun) {
+          logDryRunPost(mastIdArr[i], false, mastodonArr[i]);
+        } else {
           await bot.post(
             false,
             mastUrlArr[i],
             mastAltArr[i],
             mastCardArr[i],
             mastodonArr[i],
-          ); // Run bot.post on this text value, posting to Bluesky if the text is new. Post this as a root value. // Run bot.post on this text value, posting to Bluesky if the text is new. Post this as a root value.
-        } // Complicated case where a post is longer than 300 characters, longer than a valid Bluesky post.
-        else {
-          const wordArr = mastodonArr[i].split(' '); // Turn the string into an array of words parsed by spaces.
-          let chunkLen = 0; // Initialize the length of a chunk to 0.
-          let chunkArr = []; // Initialize the array storing the words contained in the chunk to be empty.
-          const threadArr = []; // Initialize the array storing the chunk strings to be empty.
-          let chunkStr = ''; // Initialize the chunk string to be empty.
-          while (wordArr.length !== 0) {
-            // Loop while there are still words in the array to chunk.
-            if (chunkLen + wordArr[0].length <= 294) {
-              // If adding the next word in the array to the chunk will not cause it to surpass the max length:
-              chunkLen += wordArr[0].length + 1; // Increase the chunk length by the length of the word being added.
-              chunkArr.push(wordArr.shift()); // Add the new word to the end of the chunk array, while also removing it from the front of the word array.
-            } // If the max length is surpassed by adding the next word to the chunk:
-            else {
-              chunkStr = chunkArr.join(' '); // Turn the chunk into a string by delimiting the words with spaces.
-              chunkArr = []; // Empty the chunk array.
-              chunkLen = 0; // Reset the chunk length to 0.
-              threadArr.push(chunkStr); // Add the chunk string to the thread array.
-            }
+          ); // Run bot.post on this text value, posting to Bluesky if the text is new. Post this as a root value.
+        }
+      } // Complicated case where a post is longer than 300 characters, longer than a valid Bluesky post.
+      else {
+        const wordArr = mastodonArr[i].split(' '); // Turn the string into an array of words parsed by spaces.
+        let chunkLen = 0; // Initialize the length of a chunk to 0.
+        let chunkArr = []; // Initialize the array storing the words contained in the chunk to be empty.
+        const threadArr = []; // Initialize the array storing the chunk strings to be empty.
+        let chunkStr = ''; // Initialize the chunk string to be empty.
+        while (wordArr.length !== 0) {
+          // Loop while there are still words in the array to chunk.
+          if (chunkLen + wordArr[0].length <= 294) {
+            // If adding the next word in the array to the chunk will not cause it to surpass the max length:
+            chunkLen += wordArr[0].length + 1; // Increase the chunk length by the length of the word being added.
+            chunkArr.push(wordArr.shift()); // Add the new word to the end of the chunk array, while also removing it from the front of the word array.
+          } // If the max length is surpassed by adding the next word to the chunk:
+          else {
+            chunkStr = chunkArr.join(' '); // Turn the chunk into a string by delimiting the words with spaces.
+            chunkArr = []; // Empty the chunk array.
+            chunkLen = 0; // Reset the chunk length to 0.
+            threadArr.push(chunkStr); // Add the chunk string to the thread array.
           }
-          chunkStr = chunkArr.join(' '); // Turn the last chunk into a string by delimiting the words with spaces.
-          threadArr.push(chunkStr); // Add the last chunk string to the thread array.
-          let isReply = false; // Create a boolean value to determine if we want to post a root post or a reply. Start with a root post.
-          for (
-            let j = 0;
-            j < threadArr.length;
-            j++ // Iterate over all of the chunk strings contained in the thread array.
-          ) {
+        }
+        chunkStr = chunkArr.join(' '); // Turn the last chunk into a string by delimiting the words with spaces.
+        threadArr.push(chunkStr); // Add the last chunk string to the thread array.
+        let isReply = false; // Create a boolean value to determine if we want to post a root post or a reply. Start with a root post.
+        for (
+          let j = 0;
+          j < threadArr.length;
+          j++ // Iterate over all of the chunk strings contained in the thread array.
+        ) {
+          const postText = `${threadArr[j]} [${j + 1}/${threadArr.length}]`;
+          if (config.dryRun) {
+            logDryRunPost(mastIdArr[i], isReply, postText);
+          } else {
             await bot.post(
               isReply,
               mastUrlArr[i],
               mastAltArr[i],
               mastCardArr[i],
-              `${threadArr[j]} [${j + 1}/${threadArr.length}]`,
-            ); // Post string j in the thread array. Use the boolean variable to determine whether this is a root post or a reply, add a post counter on the end to make the thread easier to read.
-            if (isReply === false) {
-              // If this post was posted as a root, meaning that this is the first iteration:
-              isReply = true; // Set the boolean value to post as replies for the remaining iterations.
-              mastUrlArr[i] = 'None!^&None!^&None!^&None';
-              mastAltArr[i] = 'None!^&None!^&None!^&None';
-            }
+              postText,
+            ); // Post string j in the thread array.
+          }
+          if (isReply === false) {
+            // If this post was posted as a root, meaning that this is the first iteration:
+            isReply = true; // Set the boolean value to post as replies for the remaining iterations.
+            mastUrlArr[i] = 'None!^&None!^&None!^&None';
+            mastAltArr[i] = 'None!^&None!^&None!^&None';
           }
         }
       }
