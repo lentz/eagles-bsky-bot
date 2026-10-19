@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 
 import Bot from '../src/lib/bot.ts';
@@ -107,6 +110,7 @@ function mockMastodon(statuses) {
     getStatuses: async (accountId, options) => {
       assert.equal(accountId, 'mock-account-id');
       assert.equal(options.limit, 20);
+      assert.equal(options.since_id, config.lastMastodonId || undefined);
       return { json: statuses };
     },
   };
@@ -134,6 +138,16 @@ test('converts a mocked Mastodon text response into the Bluesky post record', as
   assert.equal(calls.posts.length, 1);
   assert.equal(calls.posts[0].text, 'Go Eagles & fly!');
   assert.equal('embed' in calls.posts[0], false);
+});
+
+test('uses the saved Mastodon ID as the since_id query parameter', async () => {
+  const savedMastodonId = config.lastMastodonId;
+  config.lastMastodonId = 'saved-mastodon-id';
+  try {
+    await getMastodonPosts(mockMastodon([]), config.mastodonHandle);
+  } finally {
+    config.lastMastodonId = savedMastodonId;
+  }
 });
 
 test('uploads multiple images and preserves descriptions and missing alt text', async () => {
@@ -329,17 +343,33 @@ test('splits long Mastodon posts into Bluesky thread records with reply referenc
   });
 });
 
-test('skips duplicate and empty posts without publishing to Bluesky', async () => {
-  const { bot, calls } = createBot({
-    feeds: [[feedEntry('Already mirrored')]],
-  });
+test('writes the last mirrored Mastodon ID to the GitHub step output', async () => {
+  const outputDirectory = await mkdtemp(join(tmpdir(), 'eagles-bsky-bot-'));
+  const outputPath = join(outputDirectory, 'github-output');
+  const previousOutputPath = config.githubOutput;
+  config.githubOutput = outputPath;
+  const mastodon = mockMastodon([
+    {
+      id: 'mastodon-checkpoint',
+      content: '<p>Checkpoint post</p>',
+      media_attachments: [],
+      card: null,
+    },
+  ]);
+  const { agent } = createBot();
 
-  await withMockFetch(mockFetch(), async () => {
-    await bot.post(false, emptyMedia, emptyAltText, 'None', 'Already mirrored');
-    await bot.post(false, emptyMedia, emptyAltText, 'None', '');
-  });
-
-  assert.equal(calls.posts.length, 0);
+  try {
+    await withMockFetch(mockFetch(), async () => {
+      await Bot.run(agent, mastodon);
+    });
+    assert.equal(
+      await readFile(outputPath, 'utf8'),
+      'last_mastodon_id=mastodon-checkpoint\n',
+    );
+  } finally {
+    config.githubOutput = previousOutputPath;
+    await rm(outputDirectory, { recursive: true, force: true });
+  }
 });
 
 test('does not post a reply when the Bluesky feed has no parent post', async () => {

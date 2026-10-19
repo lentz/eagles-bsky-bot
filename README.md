@@ -16,10 +16,11 @@ variables already set in the shell take precedence. Do not commit `.env`.
 | `MASTODON_ACCESS_TOKEN` | Yes | — | Mastodon API token with read access to statuses. Keep this secret. |
 | `MASTODON_HANDLE` | Yes | — | Mastodon account handle to replace with the Bluesky handle in mirrored post text, e.g. `@TEAM@sportsbots.xyz`. |
 | `BSKY_SERVICE` | No | `https://bsky.social` | Bluesky service endpoint. |
-| `POST_LIMIT` | No | `20` | Positive whole number of recent posts to fetch from Mastodon and check in the Bluesky feed. |
+| `LAST_MASTODON_ID` | No | — | Mastodon status ID to fetch newer posts than. GitHub Actions updates this repository variable after successful non-dry-run executions. |
+| `POST_LIMIT` | No | `20` | Max number of recent Mastodon posts. |
 
 For GitHub Actions, add `BSKY_PASSWORD` and `MASTODON_ACCESS_TOKEN` under **Settings > Secrets and variables > Actions > Secrets**.
-Add `BSKY_HANDLE` and `MASTODON_HANDLE` under **Variables**.
+Add `BSKY_HANDLE` and `MASTODON_HANDLE` under **Variables**. The workflow creates or updates `LAST_MASTODON_ID`; no initial value is required.
 
 ## Development
 

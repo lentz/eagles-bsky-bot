@@ -41,16 +41,18 @@ export async function getMastodonPosts(
     mastodonAccount.id,
     {
       limit: config.postLimit,
+      ...(config.lastMastodonId ? { since_id: config.lastMastodonId } : {}),
     },
   );
-  const serializedStatusesResponse = JSON.stringify(mastodonStatusesResponse);
-  const statuses = JSON.parse(serializedStatusesResponse).json;
+
+  const statuses = mastodonStatusesResponse.json;
+
   const postTexts = [];
   const postMediaUrls = [];
   const postMediaAltTexts = [];
   const postLinkCards = [];
   const postIds = [];
-  for (const status of statuses.slice(0, config.postLimit)) {
+  for (const status of statuses) {
     const mediaUrls = [];
     const mediaAltTexts = [];
     postIds.push(status.id);
@@ -114,7 +116,7 @@ export async function getMastodonPosts(
       linkCardFields.push(status.card.url);
       linkCardFields.push(status.card.title);
       linkCardFields.push(status.card.description);
-      linkCardFields.push(status.card.image);
+      linkCardFields.push('image' in status.card ? status.card.image : '');
       postLinkCards.push(linkCardFields.join('!^&'));
     } else {
       postLinkCards.push('None');

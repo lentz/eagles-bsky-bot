@@ -1,3 +1,4 @@
+import { appendFile } from 'node:fs/promises';
 import type {
   $Typed,
   AppBskyEmbedExternal,
@@ -20,25 +21,6 @@ async function fetchBuffer(mediaUrl: string): Promise<Buffer> {
   return Buffer.from(await mediaResponse.arrayBuffer());
 }
 
-function getFeedPostText(postRecord: unknown): string | undefined {
-  if (
-    typeof postRecord === 'object' &&
-    postRecord !== null &&
-    'text' in postRecord &&
-    typeof postRecord.text === 'string'
-  ) {
-    return postRecord.text;
-  }
-  return undefined;
-}
-
-function isDuplicateOrEmpty(
-  postText: string,
-  recentPostTexts: readonly string[],
-) {
-  return postText.length === 0 || recentPostTexts.includes(postText);
-}
-
 export default class Bot {
   blueskyAgent: AtpAgent;
 
@@ -50,22 +32,7 @@ export default class Bot {
   }
 
   /**
-   * Retrieves recent text records from the configured Bluesky account.
-   *
-   * @returns Text from recent feed records that contain a string value.
-   */
-  async getRecentPostTexts() {
-    const feedResponse = await this.blueskyAgent.app.bsky.feed.getAuthorFeed({
-      actor: config.bskyHandle,
-      limit: config.postLimit,
-    });
-    return feedResponse.data.feed
-      .map(({ post }) => getFeedPostText(post.record))
-      .filter((postText): postText is string => postText !== undefined);
-  }
-
-  /**
-   * Publishes a video post unless its text is empty or already in the recent feed.
+   * Publishes a video post unless its text is empty.
    *
    * @param videoUrl - URL of the video to upload.
    * @param videoMetadata - Encoded video dimensions and thumbnail metadata.
@@ -80,22 +47,7 @@ export default class Bot {
       | (Partial<AppBskyFeedPost.Record> &
           Omit<AppBskyFeedPost.Record, 'createdAt'>),
   ): Promise<void> {
-    const feedResponse = await this.blueskyAgent.app.bsky.feed.getAuthorFeed({
-      actor: config.bskyHandle,
-      limit: config.postLimit,
-    });
-    const recentFeed = feedResponse.data.feed;
-    const recentPostTexts = recentFeed
-      .map(({ post }) => getFeedPostText(post.record))
-      .filter((feedText): feedText is string => feedText !== undefined);
-
-    if (
-      typeof postText === 'string' &&
-      isDuplicateOrEmpty(postText, recentPostTexts)
-    ) {
-      console.log(`Post has already been mirrored.`);
-      return;
-    } else if (typeof postText !== 'string') {
+    if (typeof postText !== 'string') {
       return;
     }
 
@@ -277,16 +229,6 @@ export default class Bot {
           this.rootCid = latestPostCid;
         }
       }
-      const recentPostTexts = recentFeed
-        .map(({ post }) => getFeedPostText(post.record))
-        .filter((feedText): feedText is string => feedText !== undefined);
-      if (
-        typeof postText === 'string' &&
-        isDuplicateOrEmpty(postText, recentPostTexts)
-      ) {
-        console.log('Post has already been mirrored.');
-        return '37';
-      }
       if (typeof postText === 'string') {
         const richText = new RichText({ text: postText });
         await richText.detectFacets(this.blueskyAgent);
@@ -295,6 +237,7 @@ export default class Bot {
         if (isReply === true) {
           const rootPostReference = { uri: this.rootUri, cid: this.rootCid };
           if (mediaUrls[0] !== 'None') {
+            console.log('Posting reply with URL');
             postRecord = {
               text: richText.text,
               facets: richText.facets,
@@ -305,6 +248,7 @@ export default class Bot {
               embed: imageEmbed,
             };
           } else if (encodedLinkCard !== 'None') {
+            console.log('Posting reply with card');
             postRecord = {
               text: richText.text,
               facets: richText.facets,
@@ -314,9 +258,8 @@ export default class Bot {
               },
               embed: linkCardEmbed,
             };
-            console.log('record with card');
-            console.log(postRecord);
           } else {
+            console.log('Posting reply text');
             postRecord = {
               text: richText.text,
               facets: richText.facets,
@@ -328,23 +271,21 @@ export default class Bot {
           }
         } else {
           if (mediaUrls[0] !== 'None') {
-            console.log('there is a url.');
+            console.log('Posting with URL');
             postRecord = {
               text: richText.text,
               facets: richText.facets,
               embed: imageEmbed,
             };
           } else if (encodedLinkCard !== 'None') {
-            console.log('there is a card.');
+            console.log('Posting card');
             postRecord = {
               text: richText.text,
               facets: richText.facets,
               embed: linkCardEmbed,
             };
-            console.log('record with card');
-            console.log(postRecord);
           } else {
-            console.log('no url or card');
+            console.log('Posting text');
             postRecord = {
               text: richText.text,
               facets: richText.facets,
@@ -365,13 +306,12 @@ export default class Bot {
    */
   static async run(blueskyAgent: AtpAgent, mastodonApi: API) {
     const bot = new Bot(blueskyAgent);
-    const dryRunFeedTexts = config.dryRun
-      ? await bot.getRecentPostTexts()
-      : undefined;
     const serializedMastodonPostData = await getMastodonPosts(
       mastodonApi,
       config.mastodonHandle,
     );
+
+    console.log(serializedMastodonPostData);
 
     const mastodonPostDataFields = serializedMastodonPostData.split('~~~');
     const mastodonPostMediaUrls = mastodonPostDataFields[0].split('@#%');
@@ -385,10 +325,6 @@ export default class Bot {
       isReply: boolean,
       postText: string,
     ) => {
-      if (dryRunFeedTexts && isDuplicateOrEmpty(postText, dryRunFeedTexts)) {
-        console.log(`[DRY RUN] Post ${postId} has already been mirrored.`);
-        return;
-      }
       console.log(
         `[DRY RUN] Would ${isReply ? 'reply' : 'publish'} for Mastodon post ID ${postId} (${postText.length} characters).`,
       );
@@ -457,6 +393,13 @@ export default class Bot {
             mediaAltTexts = 'None!^&None!^&None!^&None';
           }
         }
+      }
+      if (!config.dryRun && mastodonPost.postId && config.githubOutput) {
+        await appendFile(
+          config.githubOutput,
+          `last_mastodon_id=${mastodonPost.postId}\n`,
+          'utf8',
+        );
       }
     }
     return;
