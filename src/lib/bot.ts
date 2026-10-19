@@ -9,7 +9,12 @@ import { type AtpAgent, RichText } from '@atproto/api';
 import type { API } from 'tsl-mastodon-api';
 
 import { config } from './config.ts';
-import { getMastodonPosts } from './mastodon.ts';
+import {
+  getMastodonPosts,
+  type MastodonLinkCard,
+  type MastodonMediaAttachment,
+  type MastodonVideoMetadata,
+} from './mastodon.ts';
 
 async function fetchBuffer(mediaUrl: string): Promise<Buffer> {
   const mediaResponse = await fetch(mediaUrl);
@@ -41,7 +46,7 @@ export default class Bot {
    */
   async postVideo(
     videoUrl: string,
-    videoMetadata: string,
+    videoMetadata: MastodonVideoMetadata,
     postText:
       | string
       | (Partial<AppBskyFeedPost.Record> &
@@ -50,8 +55,6 @@ export default class Bot {
     if (typeof postText !== 'string') {
       return;
     }
-
-    const videoMetadataFields = videoMetadata.split('@#*');
 
     const videoBuffer = await fetchBuffer(videoUrl);
 
@@ -73,8 +76,8 @@ export default class Bot {
         $type: 'app.bsky.embed.video',
         video: videoUploadResponse.data.blob,
         aspectRatio: {
-          width: parseInt(videoMetadataFields[0], 10),
-          height: parseInt(videoMetadataFields[1], 10),
+          width: videoMetadata.width,
+          height: videoMetadata.height,
         },
       },
     });
@@ -84,27 +87,25 @@ export default class Bot {
    * Publishes a post or reply with any available media or link-card embeds.
    *
    * @param isReply - Whether the post should reply to the preceding thread post.
-   * @param encodedMediaUrls - Encoded media URLs associated with the source post.
-   * @param encodedMediaAltTexts - Encoded media descriptions and video metadata.
-   * @param encodedLinkCard - Encoded link-card metadata, or `None` when absent.
+   * @param mediaAttachments - Media attachments associated with the source post.
+   * @param linkCard - Link-card metadata, when present.
    * @param postText - Text or feed record to publish.
    * @returns The Bluesky post response, or `37` when the post is skipped.
    */
   async post(
     isReply: boolean,
-    encodedMediaUrls: string,
-    encodedMediaAltTexts: string,
-    encodedLinkCard: string,
+    mediaAttachments: MastodonMediaAttachment[],
+    linkCard: MastodonLinkCard | undefined,
     postText:
       | string
       | (Partial<AppBskyFeedPost.Record> &
           Omit<AppBskyFeedPost.Record, 'createdAt'>),
   ) {
     let imageEmbed: $Typed<AppBskyEmbedImages.Main> | undefined;
-    const mediaUrls = encodedMediaUrls.split('!^&');
-    const mediaAltTexts = encodedMediaAltTexts.split('!^&');
-    const linkCardFields = encodedLinkCard.split('!^&');
     let linkCardEmbed: $Typed<AppBskyEmbedExternal.Main> | undefined;
+    const firstAttachment = mediaAttachments[0];
+    let firstMediaUrl = firstAttachment?.url;
+    let firstMediaAltText = firstAttachment?.altText;
 
     const { data: serviceAuth } =
       await this.blueskyAgent.com.atproto.server.getServiceAuth({
@@ -126,34 +127,35 @@ export default class Bot {
     const videoUploadLimits = await videoUploadLimitsResponse.json();
 
     if (
-      mediaUrls[0].slice(-3) === 'mp4' &&
-      parseFloat(mediaAltTexts[0].split('@#*')[2]) <= 600 &&
+      firstMediaUrl?.slice(-3) === 'mp4' &&
+      firstAttachment?.video?.duration !== undefined &&
+      firstAttachment.video.duration <= 600 &&
       videoUploadLimits.canUpload === true
     ) {
-      await this.postVideo(mediaUrls[0], mediaAltTexts[0], postText);
+      await this.postVideo(firstMediaUrl, firstAttachment.video, postText);
       return 37;
     } else {
-      if (mediaUrls[0].slice(-3) === 'mp4') {
-        mediaUrls[0] = mediaAltTexts[0].split('@#*')[3];
+      if (firstMediaUrl?.slice(-3) === 'mp4' && firstAttachment?.video) {
+        firstMediaUrl = firstAttachment.video.previewUrl;
         if (videoUploadLimits.canUpload === false) {
-          mediaAltTexts[0] =
+          firstMediaAltText =
             'The bot has posted its maximum number of videos for the day. This is the thumbnail of the video instead.';
         } else {
-          mediaAltTexts[0] =
+          firstMediaAltText =
             'The video is too long to be posted on Bluesky. This is the thumbnail of the video instead.';
         }
       }
-      if (encodedLinkCard !== 'None' && mediaUrls[0] === 'None') {
-        const linkCardImageBuffer = await fetchBuffer(linkCardFields[3]);
+      if (linkCard && firstMediaUrl === undefined && linkCard.image) {
+        const linkCardImageBuffer = await fetchBuffer(linkCard.image);
         const linkCardImageUpload =
           await this.blueskyAgent.com.atproto.repo.uploadBlob(
             new Uint8Array(linkCardImageBuffer),
             { encoding: 'image/png' },
           );
         const externalLinkCard = {
-          uri: linkCardFields[0],
-          title: linkCardFields[1],
-          description: linkCardFields[2],
+          uri: linkCard.url,
+          title: linkCard.title,
+          description: linkCard.description,
           thumb: linkCardImageUpload.data.blob,
         };
         linkCardEmbed = {
@@ -162,8 +164,9 @@ export default class Bot {
         };
       }
 
-      for (const [attachmentIndex, mediaUrl] of mediaUrls.entries()) {
-        if (mediaUrl !== 'None') {
+      for (const [attachmentIndex, attachment] of mediaAttachments.entries()) {
+        const mediaUrl = attachmentIndex === 0 ? firstMediaUrl : attachment.url;
+        if (mediaUrl !== undefined) {
           const imageBuffer = await fetchBuffer(mediaUrl);
           if (imageBuffer.length <= 1000000) {
             const imageUploadResponse =
@@ -172,12 +175,14 @@ export default class Bot {
                 { encoding: 'image/png' },
               );
             if (imageEmbed === undefined) {
-              if (mediaAltTexts[attachmentIndex] !== 'None') {
+              const altText =
+                attachmentIndex === 0 ? firstMediaAltText : attachment.altText;
+              if (altText !== undefined) {
                 imageEmbed = {
                   images: [
                     {
                       image: imageUploadResponse.data.blob,
-                      alt: mediaAltTexts[attachmentIndex],
+                      alt: altText,
                     },
                   ],
                   $type: 'app.bsky.embed.images',
@@ -189,10 +194,12 @@ export default class Bot {
                 };
               }
             } else {
-              if (mediaAltTexts[attachmentIndex] !== 'None') {
+              const altText =
+                attachmentIndex === 0 ? firstMediaAltText : attachment.altText;
+              if (altText !== undefined) {
                 imageEmbed.images.push({
                   image: imageUploadResponse.data.blob,
-                  alt: mediaAltTexts[attachmentIndex],
+                  alt: altText,
                 });
               } else {
                 imageEmbed.images.push({
@@ -236,7 +243,7 @@ export default class Bot {
           Omit<AppBskyFeedPost.Record, 'createdAt'>;
         if (isReply === true) {
           const rootPostReference = { uri: this.rootUri, cid: this.rootCid };
-          if (mediaUrls[0] !== 'None') {
+          if (firstMediaUrl !== undefined) {
             console.log('Posting reply with URL');
             postRecord = {
               text: richText.text,
@@ -247,7 +254,7 @@ export default class Bot {
               },
               embed: imageEmbed,
             };
-          } else if (encodedLinkCard !== 'None') {
+          } else if (linkCard) {
             console.log('Posting reply with card');
             postRecord = {
               text: richText.text,
@@ -270,14 +277,14 @@ export default class Bot {
             };
           }
         } else {
-          if (mediaUrls[0] !== 'None') {
+          if (firstMediaUrl !== undefined) {
             console.log('Posting with URL');
             postRecord = {
               text: richText.text,
               facets: richText.facets,
               embed: imageEmbed,
             };
-          } else if (encodedLinkCard !== 'None') {
+          } else if (linkCard) {
             console.log('Posting card');
             postRecord = {
               text: richText.text,
@@ -306,19 +313,10 @@ export default class Bot {
    */
   static async run(blueskyAgent: AtpAgent, mastodonApi: API) {
     const bot = new Bot(blueskyAgent);
-    const serializedMastodonPostData = await getMastodonPosts(
+    const mastodonPosts = await getMastodonPosts(
       mastodonApi,
       config.mastodonHandle,
     );
-
-    console.log(serializedMastodonPostData);
-
-    const mastodonPostDataFields = serializedMastodonPostData.split('~~~');
-    const mastodonPostMediaUrls = mastodonPostDataFields[0].split('@#%');
-    const mastodonPostTexts = mastodonPostDataFields[1].split('@#%');
-    const mastodonPostMediaAltTexts = mastodonPostDataFields[2].split('@#%');
-    const mastodonPostLinkCards = mastodonPostDataFields[3].split('@#%');
-    const mastodonPostIds = mastodonPostDataFields[4].split('@#%');
 
     const logDryRunPost = (
       postId: string,
@@ -330,19 +328,8 @@ export default class Bot {
       );
     };
 
-    const mastodonPosts = mastodonPostTexts
-      .map((postText, postIndex) => ({
-        postId: mastodonPostIds[postIndex],
-        text: postText,
-        mediaUrls: mastodonPostMediaUrls[postIndex],
-        mediaAltTexts: mastodonPostMediaAltTexts[postIndex],
-        linkCard: mastodonPostLinkCards[postIndex],
-      }))
-      .reverse();
-
-    for (const mastodonPost of mastodonPosts) {
-      let mediaUrls = mastodonPost.mediaUrls;
-      let mediaAltTexts = mastodonPost.mediaAltTexts;
+    for (const mastodonPost of [...mastodonPosts].reverse()) {
+      let mediaAttachments = mastodonPost.mediaAttachments;
       console.log(
         `${config.dryRun ? '[DRY RUN] ' : ''}Mirroring Mastodon post ID ${mastodonPost.postId}`,
       );
@@ -352,8 +339,7 @@ export default class Bot {
         } else {
           await bot.post(
             false,
-            mediaUrls,
-            mediaAltTexts,
+            mediaAttachments,
             mastodonPost.linkCard,
             mastodonPost.text,
           );
@@ -381,16 +367,14 @@ export default class Bot {
           } else {
             await bot.post(
               isReply,
-              mediaUrls,
-              mediaAltTexts,
+              mediaAttachments,
               mastodonPost.linkCard,
               postText,
             );
           }
           if (isReply === false) {
             isReply = true;
-            mediaUrls = 'None!^&None!^&None!^&None';
-            mediaAltTexts = 'None!^&None!^&None!^&None';
+            mediaAttachments = [];
           }
         }
       }

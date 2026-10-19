@@ -8,8 +8,7 @@ import Bot from '../src/lib/bot.ts';
 import { config } from '../src/lib/config.ts';
 import { getMastodonPosts } from '../src/lib/mastodon.ts';
 
-const emptyMedia = 'None!^&None!^&None!^&None';
-const emptyAltText = 'None!^&None!^&None!^&None';
+const emptyMedia = [];
 
 function feedEntry(text, uri = 'at://did:plc:feed/post', cid = 'feed-cid') {
   return {
@@ -116,8 +115,8 @@ function mockMastodon(statuses) {
   };
 }
 
-test('converts a mocked Mastodon text response into the Bluesky post record', async () => {
-  const serialized = await getMastodonPosts(
+test('returns structured Mastodon post data and posts its text to Bluesky', async () => {
+  const [mastodonPost] = await getMastodonPosts(
     mockMastodon([
       {
         id: 'mastodon-1',
@@ -128,16 +127,85 @@ test('converts a mocked Mastodon text response into the Bluesky post record', as
     ]),
     config.mastodonHandle,
   );
-  const [media, text, altText, linkCard] = serialized.split('~~~');
   const { bot, calls } = createBot();
 
   await withMockFetch(mockFetch(), async () => {
-    await bot.post(false, media, altText, linkCard, text);
+    await bot.post(
+      false,
+      mastodonPost.mediaAttachments,
+      mastodonPost.linkCard,
+      mastodonPost.text,
+    );
   });
 
+  assert.deepEqual(mastodonPost, {
+    postId: 'mastodon-1',
+    text: 'Go Eagles & fly!',
+    mediaAttachments: [],
+  });
   assert.equal(calls.posts.length, 1);
   assert.equal(calls.posts[0].text, 'Go Eagles & fly!');
   assert.equal('embed' in calls.posts[0], false);
+});
+
+test('returns media, video, and link-card metadata as structured fields', async () => {
+  const [mastodonPost] = await getMastodonPosts(
+    mockMastodon([
+      {
+        id: 'mastodon-media',
+        content: '<p>Watch this highlight</p>',
+        media_attachments: [
+          {
+            type: 'image',
+            url: 'https://media.test/image.png',
+            description: 'Players celebrating',
+          },
+          {
+            type: 'video',
+            url: 'https://media.test/highlights.mp4',
+            preview_url: 'https://media.test/preview.png',
+            meta: {
+              original: { width: 1280, height: 720, duration: 120 },
+            },
+          },
+        ],
+        card: {
+          type: 'photo',
+          url: 'https://sports.test/story',
+          title: 'Game recap',
+          description: 'A short description',
+          image: 'https://media.test/card.png',
+        },
+      },
+    ]),
+    config.mastodonHandle,
+  );
+
+  assert.deepEqual(mastodonPost, {
+    postId: 'mastodon-media',
+    text: 'Watch this highlight',
+    mediaAttachments: [
+      {
+        url: 'https://media.test/image.png',
+        altText: 'Players celebrating',
+      },
+      {
+        url: 'https://media.test/highlights.mp4',
+        video: {
+          width: 1280,
+          height: 720,
+          duration: 120,
+          previewUrl: 'https://media.test/preview.png',
+        },
+      },
+    ],
+    linkCard: {
+      url: 'https://sports.test/story',
+      title: 'Game recap',
+      description: 'A short description',
+      image: 'https://media.test/card.png',
+    },
+  });
 });
 
 test('uses the saved Mastodon ID as the since_id query parameter', async () => {
@@ -153,15 +221,12 @@ test('uses the saved Mastodon ID as the since_id query parameter', async () => {
 test('uploads multiple images and preserves descriptions and missing alt text', async () => {
   const { bot, calls } = createBot();
   const media = [
-    'https://media.test/one.png',
-    'https://media.test/two.png',
-    'None',
-    'None',
-  ].join('!^&');
-  const alt = ['Crowd', 'None', 'None', 'None'].join('!^&');
+    { url: 'https://media.test/one.png', altText: 'Crowd' },
+    { url: 'https://media.test/two.png' },
+  ];
 
   await withMockFetch(mockFetch(), async () => {
-    await bot.post(false, media, alt, 'None', 'Image post');
+    await bot.post(false, media, undefined, 'Image post');
   });
 
   assert.equal(calls.uploads.length, 2);
@@ -178,9 +243,8 @@ test('omits images larger than the one-megabyte upload limit but still posts tex
   await withMockFetch(mockFetch(true, oversizedImage), async () => {
     await bot.post(
       false,
-      'https://media.test/large.png!^&None!^&None!^&None',
-      'Large image!^&None!^&None!^&None',
-      'None',
+      [{ url: 'https://media.test/large.png', altText: 'Large image' }],
+      undefined,
       'Text with oversized image',
     );
   });
@@ -192,18 +256,17 @@ test('omits images larger than the one-megabyte upload limit but still posts tex
 
 test('uploads a link-card thumbnail and posts the external card embed', async () => {
   const { bot, calls } = createBot();
-  const linkCard = [
-    'https://sports.test/story',
-    'Game recap',
-    'A short description',
-    'https://media.test/card.png',
-  ].join('!^&');
+  const linkCard = {
+    url: 'https://sports.test/story',
+    title: 'Game recap',
+    description: 'A short description',
+    image: 'https://media.test/card.png',
+  };
 
   await withMockFetch(mockFetch(), async () => {
     await bot.post(
       false,
       emptyMedia,
-      emptyAltText,
       linkCard,
       'Read this story',
     );
@@ -227,9 +290,18 @@ test('uploads an eligible video and posts its dimensions', async () => {
   await withMockFetch(mockFetch(), async () => {
     await bot.post(
       false,
-      'https://media.test/highlights.mp4!^&None!^&None!^&None',
-      '1280@#*720@#*120@#*https://media.test/preview.png!^&None!^&None!^&None',
-      'None',
+      [
+        {
+          url: 'https://media.test/highlights.mp4',
+          video: {
+            width: 1280,
+            height: 720,
+            duration: 120,
+            previewUrl: 'https://media.test/preview.png',
+          },
+        },
+      ],
+      undefined,
       'Video post',
     );
   });
@@ -252,9 +324,18 @@ test('uses a video thumbnail when daily Bluesky video uploads are unavailable', 
   await withMockFetch(mockFetch(false), async () => {
     await bot.post(
       false,
-      'https://media.test/highlights.mp4!^&None!^&None!^&None',
-      '1280@#*720@#*120@#*https://media.test/preview.png!^&None!^&None!^&None',
-      'None',
+      [
+        {
+          url: 'https://media.test/highlights.mp4',
+          video: {
+            width: 1280,
+            height: 720,
+            duration: 120,
+            previewUrl: 'https://media.test/preview.png',
+          },
+        },
+      ],
+      undefined,
       'Video fallback',
     );
   });
@@ -274,9 +355,18 @@ test('uses a video thumbnail when the video is longer than Bluesky allows', asyn
   await withMockFetch(mockFetch(), async () => {
     await bot.post(
       false,
-      'https://media.test/highlights.mp4!^&None!^&None!^&None',
-      '1280@#*720@#*601@#*https://media.test/preview.png!^&None!^&None!^&None',
-      'None',
+      [
+        {
+          url: 'https://media.test/highlights.mp4',
+          video: {
+            width: 1280,
+            height: 720,
+            duration: 601,
+            previewUrl: 'https://media.test/preview.png',
+          },
+        },
+      ],
+      undefined,
       'Long video fallback',
     );
   });
@@ -296,7 +386,7 @@ test('attaches a reply to the latest feed post and retains the thread root', asy
   const { bot, calls } = createBot({ feeds: [[root], [reply]] });
 
   await withMockFetch(mockFetch(), async () => {
-    await bot.post(true, emptyMedia, emptyAltText, 'None', 'Second reply');
+    await bot.post(true, emptyMedia, undefined, 'Second reply');
   });
 
   assert.deepEqual(calls.posts[0].reply, {
@@ -377,7 +467,7 @@ test('does not post a reply when the Bluesky feed has no parent post', async () 
 
   await withMockFetch(mockFetch(), async () => {
     await assert.rejects(
-      bot.post(true, emptyMedia, emptyAltText, 'None', 'Reply without parent'),
+      bot.post(true, emptyMedia, undefined, 'Reply without parent'),
       /Cannot create a reply because the Bluesky author feed has no posts/,
     );
   });

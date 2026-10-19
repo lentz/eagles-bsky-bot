@@ -2,15 +2,42 @@ import type { API } from 'tsl-mastodon-api';
 
 import { config } from './config.ts';
 
+export interface MastodonVideoMetadata {
+  width: number;
+  height: number;
+  duration: number;
+  previewUrl: string;
+}
+
+export interface MastodonMediaAttachment {
+  url?: string;
+  altText?: string;
+  video?: MastodonVideoMetadata;
+}
+
+export interface MastodonLinkCard {
+  url: string;
+  title: string;
+  description: string;
+  image?: string;
+}
+
+export interface MastodonPostData {
+  postId: string;
+  text: string;
+  mediaAttachments: MastodonMediaAttachment[];
+  linkCard?: MastodonLinkCard;
+}
+
 /**
  * Fetches and formats recent statuses from the configured Mastodon account.
  *
- * @returns A serialized string containing post text and associated media metadata.
+ * @returns Structured post text and associated media metadata.
  */
 export async function getMastodonPosts(
   mastodonApi: API,
   account: string,
-): Promise<string> {
+): Promise<MastodonPostData[]> {
   const paragraphBoundaryRegExp = /<\/p><p>/g;
   const lineBreakRegExp = /<br>/g;
   const escapedQuoteRegExp = /\\"/g;
@@ -47,47 +74,38 @@ export async function getMastodonPosts(
 
   const statuses = mastodonStatusesResponse.json;
 
-  const postTexts = [];
-  const postMediaUrls = [];
-  const postMediaAltTexts = [];
-  const postLinkCards = [];
-  const postIds = [];
+  const posts: MastodonPostData[] = [];
   for (const status of statuses) {
-    const mediaUrls = [];
-    const mediaAltTexts = [];
-    postIds.push(status.id);
-    const attachments = Array.from(
-      { length: 4 },
-      (_, attachmentIndex) => status.media_attachments[attachmentIndex],
-    );
-    for (const attachment of attachments) {
-      if (attachment !== undefined) {
+    const mediaAttachments = status.media_attachments
+      .slice(0, 4)
+      .map((attachment): MastodonMediaAttachment => {
         if (
-          attachment.type === 'image' ||
-          attachment.type === 'gifv' ||
-          attachment.type === 'video'
+          attachment.type !== 'image' &&
+          attachment.type !== 'gifv' &&
+          attachment.type !== 'video'
         ) {
-          mediaUrls.push(attachment.url);
-        } else {
-          mediaUrls.push('None');
+          return {};
         }
 
         if (attachment.type === 'video' || attachment.type === 'gifv') {
-          mediaAltTexts.push(
-            `${attachment.meta.original.width}@#*${attachment.meta.original.height}@#*${attachment.meta.original.duration}@#*${attachment.preview_url}`,
-          );
-        } else if (attachment.description == null) {
-          mediaAltTexts.push('None');
-        } else {
-          mediaAltTexts.push(attachment.description);
+          return {
+            url: attachment.url ?? undefined,
+            video: {
+              width: attachment.meta.original.width,
+              height: attachment.meta.original.height,
+              duration: attachment.meta.original.duration,
+              previewUrl: attachment.preview_url,
+            },
+          };
         }
-      } else {
-        mediaUrls.push('None');
-        mediaAltTexts.push('None');
-      }
-    }
-    postMediaUrls.push(mediaUrls.join('!^&'));
-    postMediaAltTexts.push(mediaAltTexts.join('!^&'));
+
+        return {
+          url: attachment.url ?? undefined,
+          ...(attachment.description
+            ? { altText: attachment.description }
+            : {}),
+        };
+      });
     const serializedContent = JSON.stringify(status.content);
     let postText = serializedContent.slice(1, -1);
     postText = postText.replace(paragraphBoundaryRegExp, '\n\n');
@@ -110,26 +128,25 @@ export async function getMastodonPosts(
       postText = `${postText}\n\n (Offer not valid on Bluesky.)`;
     }
 
+    let linkCard: MastodonLinkCard | undefined;
     if (status.card != null) {
       postText = postText.replace(truncatedUrlRegExp, status.card.url);
-      const linkCardFields = [];
-      linkCardFields.push(status.card.url);
-      linkCardFields.push(status.card.title);
-      linkCardFields.push(status.card.description);
-      linkCardFields.push('image' in status.card ? status.card.image : '');
-      postLinkCards.push(linkCardFields.join('!^&'));
-    } else {
-      postLinkCards.push('None');
+      linkCard = {
+        url: status.card.url,
+        title: status.card.title,
+        description: status.card.description,
+        ...('image' in status.card && status.card.image
+          ? { image: status.card.image }
+          : {}),
+      };
     }
-    postTexts.push(postText);
+    posts.push({
+      postId: status.id,
+      text: postText,
+      mediaAttachments,
+      ...(linkCard ? { linkCard } : {}),
+    });
   }
 
-  const serializedPostData = [
-    postMediaUrls.join('@#%'),
-    postTexts.join('@#%'),
-    postMediaAltTexts.join('@#%'),
-    postLinkCards.join('@#%'),
-    postIds.join('@#%'),
-  ];
-  return serializedPostData.join('~~~');
+  return posts;
 }
