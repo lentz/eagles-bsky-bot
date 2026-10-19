@@ -3,7 +3,7 @@ import { test } from 'node:test';
 
 import Bot from '../src/lib/bot.ts';
 import { config } from '../src/lib/config.ts';
-import { mastodonApi } from '../src/lib/mastodon.ts';
+import { getMastodonPosts } from '../src/lib/mastodon.ts';
 
 const emptyMedia = 'None!^&None!^&None!^&None';
 const emptyAltText = 'None!^&None!^&None!^&None';
@@ -113,7 +113,7 @@ function mockMastodon(statuses) {
 }
 
 test('converts a mocked Mastodon text response into the Bluesky post record', async () => {
-  const serialized = await mastodonApi.getPostText(
+  const serialized = await getMastodonPosts(
     mockMastodon([
       {
         id: 'mastodon-1',
@@ -122,6 +122,7 @@ test('converts a mocked Mastodon text response into the Bluesky post record', as
         card: null,
       },
     ]),
+    config.mastodonHandle,
   );
   const [media, text, altText, linkCard] = serialized.split('~~~');
   const { bot, calls } = createBot();
@@ -308,9 +309,7 @@ test('splits long Mastodon posts into Bluesky thread records with reply referenc
   });
 
   await withMockFetch(mockFetch(), async () => {
-    await Bot.run(agent, {
-      getPostText: () => mastodonApi.getPostText(mastodon),
-    });
+    await Bot.run(agent, mastodon);
   });
 
   assert.equal(calls.posts.length, 3);

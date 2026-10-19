@@ -4,10 +4,11 @@ import type {
   AppBskyEmbedImages,
   AppBskyFeedPost,
 } from '@atproto/api';
-import { AtpAgent, RichText } from '@atproto/api';
+import { type AtpAgent, RichText } from '@atproto/api';
+import type { API } from 'tsl-mastodon-api';
 
 import { config } from './config.ts';
-import { mastodonApi } from './mastodon.ts';
+import { getMastodonPosts } from './mastodon.ts';
 
 async function fetchBuffer(mediaUrl: string): Promise<Buffer> {
   const mediaResponse = await fetch(mediaUrl);
@@ -44,23 +45,8 @@ export default class Bot {
   public rootCid = '';
   public rootUri = '';
 
-  constructor(
-    blueskyAgent: AtpAgent = new AtpAgent({ service: config.bskyService }),
-  ) {
+  constructor(blueskyAgent: AtpAgent) {
     this.blueskyAgent = blueskyAgent;
-  }
-
-  /**
-   * Authenticates the Bluesky agent.
-   *
-   * @param bskyHandle - Bluesky account handle.
-   * @param password - Bluesky account password.
-   */
-  async login(bskyHandle: string, password: string) {
-    await this.blueskyAgent.login({
-      identifier: bskyHandle,
-      password,
-    });
   }
 
   /**
@@ -377,16 +363,15 @@ export default class Bot {
    *
    * @returns A promise that resolves when mirroring is complete.
    */
-  static async run(
-    blueskyAgent?: AtpAgent,
-    mastodon: typeof mastodonApi = mastodonApi,
-  ) {
+  static async run(blueskyAgent: AtpAgent, mastodonApi: API) {
     const bot = new Bot(blueskyAgent);
-    await bot.login(config.bskyHandle, config.bskyPassword);
     const dryRunFeedTexts = config.dryRun
       ? await bot.getRecentPostTexts()
       : undefined;
-    const serializedMastodonPostData = await mastodon.getPostText();
+    const serializedMastodonPostData = await getMastodonPosts(
+      mastodonApi,
+      config.mastodonHandle,
+    );
 
     const mastodonPostDataFields = serializedMastodonPostData.split('~~~');
     const mastodonPostMediaUrls = mastodonPostDataFields[0].split('@#%');
