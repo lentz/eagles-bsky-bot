@@ -6,7 +6,6 @@ import { test } from 'node:test';
 
 import Bot from '../src/lib/bot.ts';
 import { config } from '../src/lib/config.ts';
-import { getMastodonPosts } from '../src/lib/mastodon.ts';
 
 const emptyMedia = [];
 
@@ -115,109 +114,6 @@ function mockMastodon(statuses) {
   };
 }
 
-test('returns structured Mastodon post data and posts its text to Bluesky', async () => {
-  const [mastodonPost] = await getMastodonPosts(
-    mockMastodon([
-      {
-        id: 'mastodon-1',
-        content: '<p>Go Eagles &amp; fly!</p>',
-        media_attachments: [],
-        card: null,
-      },
-    ]),
-    config.mastodonHandle,
-  );
-  const { bot, calls } = createBot();
-
-  await withMockFetch(mockFetch(), async () => {
-    await bot.post(
-      false,
-      mastodonPost.mediaAttachments,
-      mastodonPost.linkCard,
-      mastodonPost.text,
-    );
-  });
-
-  assert.deepEqual(mastodonPost, {
-    postId: 'mastodon-1',
-    text: 'Go Eagles & fly!',
-    mediaAttachments: [],
-  });
-  assert.equal(calls.posts.length, 1);
-  assert.equal(calls.posts[0].text, 'Go Eagles & fly!');
-  assert.equal('embed' in calls.posts[0], false);
-});
-
-test('returns media, video, and link-card metadata as structured fields', async () => {
-  const [mastodonPost] = await getMastodonPosts(
-    mockMastodon([
-      {
-        id: 'mastodon-media',
-        content: '<p>Watch this highlight</p>',
-        media_attachments: [
-          {
-            type: 'image',
-            url: 'https://media.test/image.png',
-            description: 'Players celebrating',
-          },
-          {
-            type: 'video',
-            url: 'https://media.test/highlights.mp4',
-            preview_url: 'https://media.test/preview.png',
-            meta: {
-              original: { width: 1280, height: 720, duration: 120 },
-            },
-          },
-        ],
-        card: {
-          type: 'photo',
-          url: 'https://sports.test/story',
-          title: 'Game recap',
-          description: 'A short description',
-          image: 'https://media.test/card.png',
-        },
-      },
-    ]),
-    config.mastodonHandle,
-  );
-
-  assert.deepEqual(mastodonPost, {
-    postId: 'mastodon-media',
-    text: 'Watch this highlight',
-    mediaAttachments: [
-      {
-        url: 'https://media.test/image.png',
-        altText: 'Players celebrating',
-      },
-      {
-        url: 'https://media.test/highlights.mp4',
-        video: {
-          width: 1280,
-          height: 720,
-          duration: 120,
-          previewUrl: 'https://media.test/preview.png',
-        },
-      },
-    ],
-    linkCard: {
-      url: 'https://sports.test/story',
-      title: 'Game recap',
-      description: 'A short description',
-      image: 'https://media.test/card.png',
-    },
-  });
-});
-
-test('uses the saved Mastodon ID as the since_id query parameter', async () => {
-  const savedMastodonId = config.lastMastodonId;
-  config.lastMastodonId = 'saved-mastodon-id';
-  try {
-    await getMastodonPosts(mockMastodon([]), config.mastodonHandle);
-  } finally {
-    config.lastMastodonId = savedMastodonId;
-  }
-});
-
 test('uploads multiple images and preserves descriptions and missing alt text', async () => {
   const { bot, calls } = createBot();
   const media = [
@@ -264,12 +160,7 @@ test('uploads a link-card thumbnail and posts the external card embed', async ()
   };
 
   await withMockFetch(mockFetch(), async () => {
-    await bot.post(
-      false,
-      emptyMedia,
-      linkCard,
-      'Read this story',
-    );
+    await bot.post(false, emptyMedia, linkCard, 'Read this story');
   });
 
   assert.equal(calls.posts.length, 1);

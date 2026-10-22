@@ -29,6 +29,22 @@ export interface MastodonPostData {
   linkCard?: MastodonLinkCard;
 }
 
+const postTextReplacements = (
+  account: string,
+): { pattern: RegExp; replacement: string }[] => [
+  { pattern: /<\/p><p>/g, replacement: '\n\n' },
+  { pattern: /<br>/g, replacement: '\n' },
+  { pattern: /&amp;/g, replacement: '&' },
+  {
+    pattern: new RegExp(RegExp.escape(account), 'g'),
+    replacement: config.bskyHandle,
+  },
+  {
+    pattern: /(?:&nbsp;|@twitter\.com|@sportsbots\.xyz|<:?[^>]+>)/g,
+    replacement: '',
+  },
+];
+
 /**
  * Fetches and formats recent statuses from the configured Mastodon account.
  *
@@ -38,18 +54,6 @@ export async function getMastodonPosts(
   mastodonApi: API,
   account: string,
 ): Promise<MastodonPostData[]> {
-  const paragraphBoundaryRegExp = /<\/p><p>/g;
-  const lineBreakRegExp = /<br>/g;
-  const escapedQuoteRegExp = /\\"/g;
-  const ampersandEntityRegExp = /&amp;/g;
-  const nonbreakingSpaceEntityRegExp = /&nbsp;/g;
-  const twitterDomainMentionRegExp = /@twitter.com/g;
-  const mastodonHandleRegExp = new RegExp(RegExp.escape(account), 'g');
-  const sportsBotsMentionRegExp = /@sportsbots.xyz/g;
-  const htmlTagRegExp = /<(:?[^>]+)>/g;
-  const truncatedUrlRegExp = /\S*(\.com|\.ca|\.org|\.net)\S*(…|\.\.\.)/g;
-  const nbcSportsPhillyMentionRegExp = /@nbcsphilly/g;
-
   const accountLookupResponse = await mastodonApi.get('accounts/lookup', {
     acct: account,
   });
@@ -106,31 +110,21 @@ export async function getMastodonPosts(
             : {}),
         };
       });
-    const serializedContent = JSON.stringify(status.content);
-    let postText = serializedContent.slice(1, -1);
-    postText = postText.replace(paragraphBoundaryRegExp, '\n\n');
-    postText = postText.replace(lineBreakRegExp, '\n');
-    postText = postText.replace(escapedQuoteRegExp, `"`);
-    postText = postText.replace(ampersandEntityRegExp, '&');
-    postText = postText.replace(nonbreakingSpaceEntityRegExp, '');
-    postText = postText.replace(twitterDomainMentionRegExp, '');
-    postText = postText.replace(mastodonHandleRegExp, config.bskyHandle);
-    postText = postText.replace(sportsBotsMentionRegExp, '');
-    postText = postText.replace(htmlTagRegExp, '');
-    postText = postText.replace(nbcSportsPhillyMentionRegExp, 'NBCSP');
 
-    if (
-      postText.includes('RT ') ||
-      postText.includes('Retweet ') ||
-      postText.includes('retweet ') ||
-      postText.includes('RETWEET ')
-    ) {
-      postText = `${postText}\n\n (Offer not valid on Bluesky.)`;
+    let postText = status.content;
+
+    const replacements = postTextReplacements(account);
+    for (const { pattern, replacement } of replacements) {
+      postText = postText.replace(pattern, replacement);
     }
 
     let linkCard: MastodonLinkCard | undefined;
     if (status.card != null) {
-      postText = postText.replace(truncatedUrlRegExp, status.card.url);
+      postText = postText.replace(
+        /\S*(\.com|\.ca|\.org|\.net)\S*(…|\.\.\.)/g,
+        status.card.url,
+      );
+
       linkCard = {
         url: status.card.url,
         title: status.card.title,
@@ -140,6 +134,7 @@ export async function getMastodonPosts(
           : {}),
       };
     }
+
     posts.push({
       postId: status.id,
       text: postText,
