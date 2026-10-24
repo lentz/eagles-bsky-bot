@@ -16,4 +16,4 @@ const mastodonApi = new Mastodon.API({
 
 await Bot.run(blueskyAgent, mastodonApi);
 
-console.log(`[${new Date().toISOString()}] Posts complete!`);
+console.log(`[${new Date().toISOString()}] Finished!`);

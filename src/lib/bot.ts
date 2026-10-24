@@ -318,6 +318,10 @@ export default class Bot {
       config.mastodonHandle,
     );
 
+    if (mastodonPosts.length === 0) {
+      console.log('No posts to mirror.');
+    }
+
     const logDryRunPost = (
       postId: string,
       isReply: boolean,
@@ -331,7 +335,7 @@ export default class Bot {
     for (const mastodonPost of [...mastodonPosts].reverse()) {
       let mediaAttachments = mastodonPost.mediaAttachments;
       console.log(
-        `${config.dryRun ? '[DRY RUN] ' : ''}Mirroring Mastodon post ID ${mastodonPost.postId}`,
+        `${config.dryRun ? '[DRY RUN] ' : ''}Mirroring Mastodon post ID ${mastodonPost.postId} from ${config.mastodonHandle} to ${config.bskyHandle}`,
       );
       if (mastodonPost.text.length <= 300) {
         if (config.dryRun) {
