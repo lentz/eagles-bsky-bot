@@ -16,6 +16,16 @@ import {
   type MastodonVideoMetadata,
 } from './mastodon.ts';
 
+interface PostReference {
+  uri: string;
+  cid: string;
+}
+
+interface MirroredPostReference {
+  post: PostReference;
+  root: PostReference;
+}
+
 async function fetchBuffer(mediaUrl: string): Promise<Buffer> {
   const mediaResponse = await fetch(mediaUrl);
   if (!mediaResponse.ok) {
@@ -31,6 +41,8 @@ export default class Bot {
 
   public rootCid = '';
   public rootUri = '';
+  public parentCid = '';
+  public parentUri = '';
 
   constructor(blueskyAgent: AtpAgent) {
     this.blueskyAgent = blueskyAgent;
@@ -51,9 +63,10 @@ export default class Bot {
       | string
       | (Partial<AppBskyFeedPost.Record> &
           Omit<AppBskyFeedPost.Record, 'createdAt'>),
-  ): Promise<void> {
+    reply?: AppBskyFeedPost.ReplyRef,
+  ): Promise<PostReference | undefined> {
     if (typeof postText !== 'string') {
-      return;
+      return undefined;
     }
 
     const videoBuffer = await fetchBuffer(videoUrl);
@@ -69,9 +82,10 @@ export default class Bot {
 
     console.log('Video uploaded, posting...');
 
-    await this.blueskyAgent.post({
+    return this.blueskyAgent.post({
       text: postText,
       langs: ['en'],
+      ...(reply ? { reply } : {}),
       embed: {
         $type: 'app.bsky.embed.video',
         video: videoUploadResponse.data.blob,
@@ -100,7 +114,30 @@ export default class Bot {
       | string
       | (Partial<AppBskyFeedPost.Record> &
           Omit<AppBskyFeedPost.Record, 'createdAt'>),
+    replyTo?: AppBskyFeedPost.ReplyRef,
   ) {
+    if (!isReply) {
+      this.rootUri = replyTo?.root.uri ?? '';
+      this.rootCid = replyTo?.root.cid ?? '';
+      this.parentUri = replyTo?.parent.uri ?? '';
+      this.parentCid = replyTo?.parent.cid ?? '';
+    }
+    if (
+      isReply &&
+      (!this.rootUri || !this.rootCid || !this.parentUri || !this.parentCid)
+    ) {
+      throw new Error(
+        'Cannot create a thread reply without a root and parent.',
+      );
+    }
+    const reply =
+      this.rootUri && this.rootCid && this.parentUri && this.parentCid
+        ? {
+            root: { uri: this.rootUri, cid: this.rootCid },
+            parent: { uri: this.parentUri, cid: this.parentCid },
+          }
+        : undefined;
+
     let imageEmbed: $Typed<AppBskyEmbedImages.Main> | undefined;
     let linkCardEmbed: $Typed<AppBskyEmbedExternal.Main> | undefined;
     const firstAttachment = mediaAttachments[0];
@@ -132,8 +169,17 @@ export default class Bot {
       firstAttachment.video.duration <= 600 &&
       videoUploadLimits.canUpload === true
     ) {
-      await this.postVideo(firstMediaUrl, firstAttachment.video, postText);
-      return 37;
+      const response = await this.postVideo(
+        firstMediaUrl,
+        firstAttachment.video,
+        postText,
+        reply,
+      );
+      if (response) {
+        this.rememberPost(response);
+        return response;
+      }
+      throw new Error('Video post was not published because it has no text.');
     } else {
       if (firstMediaUrl?.slice(-3) === 'mp4' && firstAttachment?.video) {
         firstMediaUrl = firstAttachment.video.previewUrl;
@@ -212,46 +258,18 @@ export default class Bot {
         }
       }
 
-      const feedResponse = await this.blueskyAgent.app.bsky.feed.getAuthorFeed({
-        actor: config.bskyHandle,
-        limit: config.postLimit,
-      });
-      const recentFeed = feedResponse.data.feed;
-      let parentPostReference = { uri: '', cid: '' };
-      if (isReply === false) {
-        this.rootUri = '';
-        this.rootCid = '';
-      } else {
-        const latestFeedPost = recentFeed[0]?.post;
-        if (!latestFeedPost) {
-          throw new Error(
-            'Cannot create a reply because the Bluesky author feed has no posts.',
-          );
-        }
-        const latestPostUri = latestFeedPost.uri;
-        const latestPostCid = latestFeedPost.cid;
-        parentPostReference = { uri: latestPostUri, cid: latestPostCid };
-        if (this.rootUri === '') {
-          this.rootUri = latestPostUri;
-          this.rootCid = latestPostCid;
-        }
-      }
       if (typeof postText === 'string') {
         const richText = new RichText({ text: postText });
         await richText.detectFacets(this.blueskyAgent);
         let postRecord: Partial<AppBskyFeedPost.Record> &
           Omit<AppBskyFeedPost.Record, 'createdAt'>;
-        if (isReply === true) {
-          const rootPostReference = { uri: this.rootUri, cid: this.rootCid };
+        if (reply) {
           if (firstMediaUrl !== undefined) {
             console.log('Posting reply with URL');
             postRecord = {
               text: richText.text,
               facets: richText.facets,
-              reply: {
-                root: rootPostReference,
-                parent: parentPostReference,
-              },
+              reply,
               embed: imageEmbed,
             };
           } else if (linkCard) {
@@ -259,10 +277,7 @@ export default class Bot {
             postRecord = {
               text: richText.text,
               facets: richText.facets,
-              reply: {
-                root: rootPostReference,
-                parent: parentPostReference,
-              },
+              reply,
               embed: linkCardEmbed,
             };
           } else {
@@ -270,10 +285,7 @@ export default class Bot {
             postRecord = {
               text: richText.text,
               facets: richText.facets,
-              reply: {
-                root: rootPostReference,
-                parent: parentPostReference,
-              },
+              reply,
             };
           }
         } else {
@@ -299,11 +311,24 @@ export default class Bot {
             };
           }
         }
-        return this.blueskyAgent.post(postRecord);
+        const response = await this.blueskyAgent.post(postRecord);
+        this.rememberPost(response);
+        return response;
       } else {
-        return this.blueskyAgent.post(postText);
+        const response = await this.blueskyAgent.post(postText);
+        this.rememberPost(response);
+        return response;
       }
     }
+  }
+
+  private rememberPost(post: PostReference) {
+    if (!this.rootUri || !this.rootCid) {
+      this.rootUri = post.uri;
+      this.rootCid = post.cid;
+    }
+    this.parentUri = post.uri;
+    this.parentCid = post.cid;
   }
 
   /**
@@ -322,32 +347,41 @@ export default class Bot {
       console.log('No posts to mirror.');
     }
 
-    const logDryRunPost = (
-      postId: string,
-      isReply: boolean,
-      postText: string,
-    ) => {
-      console.log(
-        `[DRY RUN] Would ${isReply ? 'reply' : 'publish'} for Mastodon post ID ${postId} (${postText.length} characters).`,
-      );
-    };
-
+    const mirroredPosts = new Map<string, MirroredPostReference>();
     for (const mastodonPost of [...mastodonPosts].reverse()) {
+      const sourceParent = mastodonPost.inReplyToId
+        ? mirroredPosts.get(mastodonPost.inReplyToId)
+        : undefined;
+      if (mastodonPost.inReplyToId && !sourceParent) {
+        console.warn(
+          `Mastodon post ${mastodonPost.postId} replies to ${mastodonPost.inReplyToId}, which has no mirrored Bluesky post; publishing it as a standalone post.`,
+        );
+      }
+      const replyTo = sourceParent
+        ? { root: sourceParent.root, parent: sourceParent.post }
+        : undefined;
+
       let mediaAttachments = mastodonPost.mediaAttachments;
       console.log(
-        `${config.dryRun ? '[DRY RUN] ' : ''}Mirroring Mastodon post ID ${mastodonPost.postId} from ${config.mastodonHandle} to ${config.bskyHandle}`,
+        `${config.dryRun ? '[DRY RUN] ' : ''}Mirroring Mastodon post ID ${mastodonPost.postId} from ${config.mastodonHandle} to ${config.bskyHandle}${replyTo ? ` as a reply to Mastodon post ID ${mastodonPost.inReplyToId}` : ''}`,
       );
+
+      if (config.dryRun) {
+        continue;
+      }
+
       if (mastodonPost.text.length <= 300) {
-        if (config.dryRun) {
-          logDryRunPost(mastodonPost.postId, false, mastodonPost.text);
-        } else {
-          await bot.post(
-            false,
-            mediaAttachments,
-            mastodonPost.linkCard,
-            mastodonPost.text,
-          );
-        }
+        const response = await bot.post(
+          false,
+          mediaAttachments,
+          mastodonPost.linkCard,
+          mastodonPost.text,
+          replyTo,
+        );
+        mirroredPosts.set(mastodonPost.postId, {
+          post: response,
+          root: replyTo?.root ?? response,
+        });
       } else {
         const words = mastodonPost.text.split(' ');
         let chunkLength = 0;
@@ -364,22 +398,29 @@ export default class Bot {
         }
         threadPosts.push(chunkWords.join(' '));
         let isReply = false;
+        let firstPost: PostReference | undefined;
+        let lastPost: PostReference | undefined;
         for (const [threadPostIndex, threadPost] of threadPosts.entries()) {
           const postText = `${threadPost} [${threadPostIndex + 1}/${threadPosts.length}]`;
-          if (config.dryRun) {
-            logDryRunPost(mastodonPost.postId, isReply, postText);
-          } else {
-            await bot.post(
-              isReply,
-              mediaAttachments,
-              mastodonPost.linkCard,
-              postText,
-            );
-          }
+          const response = await bot.post(
+            isReply,
+            mediaAttachments,
+            mastodonPost.linkCard,
+            postText,
+            isReply ? undefined : replyTo,
+          );
+          firstPost ??= response;
+          lastPost = response;
           if (isReply === false) {
             isReply = true;
             mediaAttachments = [];
           }
+        }
+        if (lastPost && firstPost) {
+          mirroredPosts.set(mastodonPost.postId, {
+            post: lastPost,
+            root: replyTo?.root ?? firstPost,
+          });
         }
       }
       if (!config.dryRun && mastodonPost.postId && config.githubOutput) {

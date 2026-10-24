@@ -9,34 +9,12 @@ import { config } from '../src/lib/config.ts';
 
 const emptyMedia = [];
 
-function feedEntry(text, uri = 'at://did:plc:feed/post', cid = 'feed-cid') {
-  return {
-    post: {
-      uri,
-      cid,
-      record: { text },
-    },
-  };
-}
-
-function createBot({ feeds = [[]] } = {}) {
+function createBot() {
   const calls = {
     posts: [],
     uploads: [],
   };
-  let feedIndex = 0;
   const agent = {
-    app: {
-      bsky: {
-        feed: {
-          getAuthorFeed: async () => {
-            const feed = feeds[Math.min(feedIndex, feeds.length - 1)];
-            feedIndex += 1;
-            return { data: { feed } };
-          },
-        },
-      },
-    },
     login: async () => {},
     com: {
       atproto: {
@@ -54,7 +32,11 @@ function createBot({ feeds = [[]] } = {}) {
     },
     post: async (record) => {
       calls.posts.push(record);
-      return { uri: 'at://did:plc:bot/post', cid: 'posted-cid' };
+      const postNumber = calls.posts.length;
+      return {
+        uri: `at://did:plc:bot/post-${postNumber}`,
+        cid: `posted-cid-${postNumber}`,
+      };
     },
   };
   const bot = new Bot(agent);
@@ -271,18 +253,18 @@ test('uses a video thumbnail when the video is longer than Bluesky allows', asyn
   ]);
 });
 
-test('attaches a reply to the latest feed post and retains the thread root', async () => {
-  const root = feedEntry('Root post', 'at://did:plc:bot/root', 'root-cid');
-  const reply = feedEntry('First reply', 'at://did:plc:bot/reply', 'reply-cid');
-  const { bot, calls } = createBot({ feeds: [[root], [reply]] });
+test('attaches a thread reply to the post created immediately before it', async () => {
+  const { bot, calls } = createBot();
 
   await withMockFetch(mockFetch(), async () => {
-    await bot.post(true, emptyMedia, undefined, 'Second reply');
+    await bot.post(false, emptyMedia, undefined, 'Root post');
+    await bot.post(true, emptyMedia, undefined, 'Reply to root');
   });
 
-  assert.deepEqual(calls.posts[0].reply, {
-    root: { uri: 'at://did:plc:bot/root', cid: 'root-cid' },
-    parent: { uri: 'at://did:plc:bot/root', cid: 'root-cid' },
+  assert.equal('reply' in calls.posts[0], false);
+  assert.deepEqual(calls.posts[1].reply, {
+    root: { uri: 'at://did:plc:bot/post-1', cid: 'posted-cid-1' },
+    parent: { uri: 'at://did:plc:bot/post-1', cid: 'posted-cid-1' },
   });
 });
 
@@ -295,13 +277,7 @@ test('splits long Mastodon posts into Bluesky thread records with reply referenc
       card: null,
     },
   ]);
-  const { calls, agent } = createBot({
-    feeds: [
-      [],
-      [feedEntry('First chunk', 'at://did:plc:bot/root', 'root-cid')],
-      [feedEntry('Second chunk', 'at://did:plc:bot/reply', 'reply-cid')],
-    ],
-  });
+  const { calls, agent } = createBot();
 
   await withMockFetch(mockFetch(), async () => {
     await Bot.run(agent, mastodon);
@@ -315,12 +291,42 @@ test('splits long Mastodon posts into Bluesky thread records with reply referenc
   assert.ok(calls.posts.every(({ text }) => text.length <= 300));
   assert.equal('reply' in calls.posts[0], false);
   assert.deepEqual(calls.posts[1].reply, {
-    root: { uri: 'at://did:plc:bot/root', cid: 'root-cid' },
-    parent: { uri: 'at://did:plc:bot/root', cid: 'root-cid' },
+    root: { uri: 'at://did:plc:bot/post-1', cid: 'posted-cid-1' },
+    parent: { uri: 'at://did:plc:bot/post-1', cid: 'posted-cid-1' },
   });
   assert.deepEqual(calls.posts[2].reply, {
-    root: { uri: 'at://did:plc:bot/root', cid: 'root-cid' },
-    parent: { uri: 'at://did:plc:bot/reply', cid: 'reply-cid' },
+    root: { uri: 'at://did:plc:bot/post-1', cid: 'posted-cid-1' },
+    parent: { uri: 'at://did:plc:bot/post-2', cid: 'posted-cid-2' },
+  });
+});
+
+test('links a Mastodon reply to its mirrored parent post', async () => {
+  const mastodon = mockMastodon([
+    {
+      id: 'mastodon-reply',
+      in_reply_to_id: 'mastodon-parent',
+      content: '<p>Reply</p>',
+      media_attachments: [],
+      card: null,
+    },
+    {
+      id: 'mastodon-parent',
+      content: '<p>Parent</p>',
+      media_attachments: [],
+      card: null,
+    },
+  ]);
+  const { calls, agent } = createBot();
+
+  await withMockFetch(mockFetch(), async () => {
+    await Bot.run(agent, mastodon);
+  });
+
+  assert.equal(calls.posts.length, 2);
+  assert.equal('reply' in calls.posts[0], false);
+  assert.deepEqual(calls.posts[1].reply, {
+    root: { uri: 'at://did:plc:bot/post-1', cid: 'posted-cid-1' },
+    parent: { uri: 'at://did:plc:bot/post-1', cid: 'posted-cid-1' },
   });
 });
 
@@ -353,15 +359,22 @@ test('writes the last mirrored Mastodon ID to the GitHub step output', async () 
   }
 });
 
-test('does not post a reply when the Bluesky feed has no parent post', async () => {
-  const { bot, calls } = createBot({ feeds: [[]] });
+test('publishes a Mastodon reply standalone when its parent was not mirrored', async () => {
+  const mastodon = mockMastodon([
+    {
+      id: 'mastodon-reply',
+      in_reply_to_id: 'unmirrored-parent',
+      content: '<p>Reply</p>',
+      media_attachments: [],
+      card: null,
+    },
+  ]);
+  const { agent, calls } = createBot();
 
   await withMockFetch(mockFetch(), async () => {
-    await assert.rejects(
-      bot.post(true, emptyMedia, undefined, 'Reply without parent'),
-      /Cannot create a reply because the Bluesky author feed has no posts/,
-    );
+    await Bot.run(agent, mastodon);
   });
 
-  assert.equal(calls.posts.length, 0);
+  assert.equal(calls.posts.length, 1);
+  assert.equal('reply' in calls.posts[0], false);
 });

@@ -24,6 +24,7 @@ export interface MastodonLinkCard {
 
 export interface MastodonPostData {
   postId: string;
+  inReplyToId?: string;
   text: string;
   mediaAttachments: MastodonMediaAttachment[];
   linkCard?: MastodonLinkCard;
@@ -137,6 +138,7 @@ export async function getMastodonPosts(
 
     posts.push({
       postId: status.id,
+      ...(status.in_reply_to_id ? { inReplyToId: status.in_reply_to_id } : {}),
       text: postText,
       mediaAttachments,
       ...(linkCard ? { linkCard } : {}),
