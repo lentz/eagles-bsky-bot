@@ -40,6 +40,35 @@ test('returns normalized Mastodon post data', async () => {
   });
 });
 
+test('excludes reblogs and statuses with no content', async () => {
+  const posts = await getMastodonPosts(
+    mockMastodon([
+      {
+        id: 'mastodon-reblog',
+        content: '<p>Reblogged content</p>',
+        reblog: { id: 'original-post' },
+        media_attachments: [],
+      },
+      {
+        id: 'mastodon-empty',
+        content: ' \n ',
+        media_attachments: [],
+      },
+      {
+        id: 'mastodon-content',
+        content: '<p>Original post</p>',
+        media_attachments: [],
+      },
+    ]),
+    config.mastodonHandle,
+  );
+
+  assert.deepEqual(
+    posts.map(({ postId }) => postId),
+    ['mastodon-content'],
+  );
+});
+
 test('applies Mastodon post text and card URL replacements', async () => {
   const [mastodonPost] = await getMastodonPosts(
     mockMastodon([

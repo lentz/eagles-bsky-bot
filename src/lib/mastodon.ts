@@ -81,6 +81,10 @@ export async function getMastodonPosts(
 
   const posts: MastodonPostData[] = [];
   for (const status of statuses) {
+    if (status.reblog || !status.content.trim()) {
+      continue;
+    }
+
     const mediaAttachments = status.media_attachments
       .slice(0, 4)
       .map((attachment): MastodonMediaAttachment => {
