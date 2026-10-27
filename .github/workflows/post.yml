@@ -18,20 +18,37 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Send post
-        id: send
+      - name: Mirror Eagles
+        id: eagles
         run: npm start
         env:
-          BSKY_HANDLE: ${{ vars.BSKY_HANDLE }}
-          BSKY_PASSWORD: ${{ secrets.BSKY_PASSWORD }}
+          BSKY_HANDLE: eagles-bot.bsky.social
+          BSKY_PASSWORD: ${{ secrets.EAGLES_BSKY_PASSWORD }}
           DRY_RUN: ${{ vars.DRY_RUN }}
-          LAST_MASTODON_ID: ${{ vars.LAST_MASTODON_ID }}
-          MASTODON_HANDLE: ${{ vars.MASTODON_HANDLE }}
+          LAST_MASTODON_ID: ${{ vars.EAGLES_LAST_MASTODON_ID }}
+          MASTODON_HANDLE: eagles@sportsbots.xyz
           MASTODON_ACCESS_TOKEN: ${{ secrets.MASTODON_ACCESS_TOKEN }}
           POST_LIMIT: ${{ vars.POST_LIMIT }}
       - name: Save last Mastodon ID
-        if: always() && steps.send.outputs.last_mastodon_id != ''
+        if: always() && steps.eagles.outputs.last_mastodon_id != ''
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
-          LAST_MASTODON_ID: ${{ steps.send.outputs.last_mastodon_id }}
-        run: gh variable set LAST_MASTODON_ID --body "$LAST_MASTODON_ID" --repo "$GITHUB_REPOSITORY"
+          LAST_MASTODON_ID: ${{ steps.eagles.outputs.last_mastodon_id }}
+        run: gh variable set EAGLES_LAST_MASTODON_ID --body "$LAST_MASTODON_ID" --repo "$GITHUB_REPOSITORY"
+      - name: Mirror Jeff
+        id: jeff
+        run: npm start
+        env:
+          BSKY_HANDLE: jeff-mclane-bot.bsky.social
+          BSKY_PASSWORD: ${{ secrets.JEFF_BSKY_PASSWORD }}
+          DRY_RUN: ${{ vars.DRY_RUN }}
+          LAST_MASTODON_ID: ${{ vars.JEFF_LAST_MASTODON_ID }}
+          MASTODON_HANDLE: jeff_mclane@sportsbots.xyz
+          MASTODON_ACCESS_TOKEN: ${{ secrets.MASTODON_ACCESS_TOKEN }}
+          POST_LIMIT: ${{ vars.POST_LIMIT }}
+      - name: Save last Mastodon ID
+        if: always() && steps.jeff.outputs.last_mastodon_id != ''
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          LAST_MASTODON_ID: ${{ steps.jeff.outputs.last_mastodon_id }}
+        run: gh variable set JEFF_LAST_MASTODON_ID --body "$LAST_MASTODON_ID" --repo "$GITHUB_REPOSITORY"
